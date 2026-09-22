@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#11100d" />
+  <title>LTD Sandy Shores — Livraison & Services</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-wrap">
+        <div class="brand-mark">LTD</div>
+        <div>
+          <div class="eyebrow">SANDY SHORES</div>
+          <h1>Livraison & services</h1>
+        </div>
+      </div>
+      <button class="icon-btn" id="accountBtn" aria-label="Compte"><i data-lucide="user-round"></i></button>
+    </header>
+
+    <main>
+      <section class="view active" id="homeView">
+        <div class="hero-card">
+          <div class="hero-glow"></div>
+          <div class="hero-copy">
+            <span class="pill">OUVERT • LIVRAISON DISPONIBLE</span>
+            <h2>Le Nord, livré jusqu’à vous.</h2>
+            <p>Commandez les produits du LTD en quelques secondes, cumulez des points fidélité et suivez votre livraison.</p>
+            <div class="hero-actions">
+              <button class="btn primary" data-nav="shop"><i data-lucide="shopping-bag"></i> Commander</button>
+              <button class="btn ghost" data-nav="news"><i data-lucide="megaphone"></i> Nouveautés</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card"><i data-lucide="truck"></i><strong>100 $</strong><span>Livraison standard</span></article>
+          <article class="stat-card"><i data-lucide="gift"></i><strong>100 pts</strong><span>= livraison offerte</span></article>
+          <article class="stat-card"><i data-lucide="clock-3"></i><strong>Rapide</strong><span>Suivi en direct RP</span></article>
+        </div>
+
+        <section class="section-block">
+          <div class="section-heading"><div><span class="eyebrow">À LA UNE</span><h3>Annonces du LTD</h3></div><button class="text-btn" data-nav="news">Tout voir</button></div>
+          <div id="homeAnnouncements" class="stack"></div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-heading"><div><span class="eyebrow">INFOS PRATIQUES</span><h3>Nous trouver</h3></div></div>
+          <div class="info-card">
+            <div><i data-lucide="map-pin"></i></div>
+            <div><strong>LTD Sandy Shores</strong><p>Route 68 / Sandy Shores — Blaine County</p><small>Adresse RP modifiable depuis l’espace admin.</small></div>
+          </div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-heading"><div><span class="eyebrow">CONTACTS</span><h3>Numéros utiles</h3></div></div>
+          <div id="contactsList" class="contacts-grid"></div>
+        </section>
+      </section>
+
+      <section class="view" id="shopView">
+        <div class="section-heading sticky-head"><div><span class="eyebrow">LIVRAISON</span><h2>La boutique</h2></div><button class="cart-chip" id="cartButton"><i data-lucide="shopping-cart"></i><span id="cartCount">0</span></button></div>
+        <div class="search-wrap"><i data-lucide="search"></i><input id="productSearch" placeholder="Rechercher un article…" /></div>
+        <div id="categoryChips" class="chips"></div>
+        <div id="productGrid" class="product-grid"></div>
+      </section>
+
+      <section class="view" id="ordersView">
+        <div class="section-heading"><div><span class="eyebrow">MES COMMANDES</span><h2>Suivi</h2></div></div>
+        <div id="ordersList" class="stack"></div>
+      </section>
+
+      <section class="view" id="newsView">
+        <div class="section-heading"><div><span class="eyebrow">ACTUALITÉS</span><h2>Nouveautés du LTD</h2></div></div>
+        <div id="newsList" class="stack"></div>
+      </section>
+
+      <section class="view" id="staffView">
+        <div class="section-heading"><div><span class="eyebrow">ÉQUIPE LTD</span><h2>Commandes à traiter</h2></div><button class="btn mini" id="refreshStaff"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="staff-tabs"><button class="staff-tab active" data-filter="active">À traiter</button><button class="staff-tab" data-filter="all">Toutes</button></div>
+        <div id="staffOrders" class="stack"></div>
+      </section>
+
+      <section class="view" id="adminView">
+        <div class="section-heading"><div><span class="eyebrow">ADMINISTRATION</span><h2>Gestion du site</h2></div></div>
+        <div class="admin-grid">
+          <button class="admin-card" data-admin="announcement"><i data-lucide="megaphone"></i><span>Publier une annonce</span></button>
+          <button class="admin-card" data-admin="product"><i data-lucide="package-plus"></i><span>Ajouter un produit</span></button>
+          <button class="admin-card" data-admin="contacts"><i data-lucide="phone-call"></i><span>Contacts</span></button>
+          <button class="admin-card" data-admin="settings"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
+        </div>
+        <div class="section-heading sub"><div><span class="eyebrow">ÉQUIPE</span><h3>Comptes employés</h3></div></div>
+        <div id="staffUsers" class="stack"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-nav="home"><i data-lucide="house"></i><span>Accueil</span></button>
+      <button class="nav-item" data-nav="shop"><i data-lucide="shopping-bag"></i><span>Boutique</span></button>
+      <button class="nav-item" data-nav="orders"><i data-lucide="receipt-text"></i><span>Commandes</span></button>
+      <button class="nav-item" data-nav="news"><i data-lucide="bell"></i><span>Actus</span></button>
+      <button class="nav-item hidden" id="staffNav" data-nav="staff"><i data-lucide="clipboard-check"></i><span>Employé</span></button>
+    </nav>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modalBackdrop">
+    <div class="modal" id="modalContent"></div>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
