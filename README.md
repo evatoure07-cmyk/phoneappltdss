@@ -1,37 +1,121 @@
-# LTD Sandy Shores — site mobile RP
+# LTD Sandy Shores — Site mobile V2
 
-Site mobile-first pour GTA RP : accueil du LTD, annonces, catalogue, livraison, comptes clients, fidélité, suivi de commande, espace employé et administration.
+Site mobile pour la boutique, la livraison, la fidélité, les annonces, le recrutement et la gestion interne du LTD Sandy Shores.
 
-## Ce qui fonctionne déjà
-- Accueil complet avec annonces et informations du LTD
-- Boutique filtrable par catégories
-- Panier et livraison à 100 $
-- Création de compte / connexion
-- Fidélité : 10 points par commande livrée, 100 points = livraison offerte
-- Historique et statut des commandes
-- Espace employé : accepter / préparer / mettre en livraison / livrer / annuler
-- Espace admin : publier des annonces et ajouter des produits
-- Recrutement du dimanche déjà affiché
-- Mode démo local si Supabase n'est pas encore configuré
+## Ce qui est inclus
 
-## Mise en ligne la plus simple
-1. Crée un projet Supabase.
-2. Dans `SQL Editor`, colle le contenu de `supabase.sql` puis exécute-le.
-3. Dans Supabase > Project Settings > API, copie `Project URL` et `anon public key`.
-4. Colle-les dans `config.js`.
-5. Mets tout le dossier sur GitHub puis déploie avec Netlify, Vercel ou GitHub Pages.
-6. Crée ton compte sur le site.
-7. Dans Supabase SQL Editor, exécute la dernière requête commentée de `supabase.sql` avec ton email pour passer ton compte en `admin`.
+- Accueil immersif : statut ouvert/fermé, délai estimé, adresse, téléphone, annonces et services.
+- Boutique : recherche, catégories, populaires, nouveautés, disponibilité/stock et saisie directe des quantités.
+- Panier : quantités modifiables à la main, livraison ou retrait, adresse, téléphone, note, code promo, fidélité et minimum de commande.
+- Fidélité : points ajoutés uniquement lorsqu'une commande est terminée ; à 100 points, une livraison peut être offerte.
+- Commandes : numéro de commande `SS-XXXXXX`, étapes de suivi, estimation, historique daté, détails, motif d'annulation et bouton pour recommander une ancienne commande.
+- Recrutement : postes ouverts et formulaire de candidature.
+- Espace équipe : nouvelles commandes, attribution à un seul employé, préparation, commande prête, départ livraison, livraison et annulation avec motif.
+- Direction : statistiques détaillées, annonces, produits, stock/disponibilité, promotions activables/désactivables, contacts, paramètres, rôles, points fidélité clients et candidatures.
+- Multi-appareils : avec Supabase, tous les PC/téléphones partagent les mêmes commandes et données.
+- Mise à jour en direct des commandes via Supabase Realtime.
 
-## Quand tu m'enverras la carte du LTD
-Je pourrai remplacer les articles d'exemple par les vrais articles, prix, catégories et visuels. Le site n'aura pas besoin d'être refait.
+## 1. Configurer Supabase
 
-## Paramètres faciles à changer
-Dans `config.js` :
-- `DELIVERY_FEE: 100`
-- `LOYALTY_REWARD_POINTS: 100`
-- `POINTS_PER_COMPLETED_ORDER: 10`
-- nom et adresse RP du LTD
+1. Crée un projet sur Supabase.
+2. Ouvre **SQL Editor** > **New query**.
+3. Copie tout le contenu de `supabase.sql` puis clique sur **Run**.
+   - Le script est prévu pour mettre à niveau l'ancienne V1 si tu l'avais déjà installée.
+4. Dans Supabase > **Project Settings / API**, copie :
+   - Project URL
+   - clé publique `anon` / publishable
+5. Ouvre `config.js` et remplis :
 
-## Important
-Les clés Supabase `anon` sont prévues pour être publiques. La sécurité repose sur les règles RLS incluses dans `supabase.sql`. Ne mets jamais de `service_role key` dans `config.js`.
+```js
+SUPABASE_URL: "https://TON-PROJET.supabase.co",
+SUPABASE_ANON_KEY: "TA_CLE_PUBLIQUE",
+```
+
+Ne mets jamais une clé `service_role` dans le site.
+
+## 2. Créer le premier compte Direction
+
+1. Ouvre le site et crée ton compte normalement.
+2. Dans Supabase > SQL Editor, exécute :
+
+```sql
+update public.profiles
+set role='admin'
+where id=(select id from auth.users where email='TON_EMAIL');
+```
+
+Déconnecte-toi puis reconnecte-toi sur le site. Le bouton **Direction** apparaîtra dans ton compte.
+
+Les rôles disponibles sont :
+- `customer` : client
+- `employee` : employé
+- `manager` : responsable
+- `admin` : direction principale
+
+## 3. Ajouter les vrais articles
+
+Tu pourras les ajouter directement dans **Compte > Direction > Produit**.
+
+Chaque article peut avoir :
+- nom
+- prix
+- description
+- catégorie
+- icône/emoji
+- stock limité ou illimité
+- disponible / indisponible
+- populaire
+- nouveauté
+
+Quand la vraie carte du LTD sera disponible, remplace les produits exemples par les vrais produits et prix.
+
+## 4. Paramètres modifiables depuis le site
+
+Dans **Direction > Paramètres** :
+- ouvrir / fermer les commandes
+- frais de livraison
+- minimum de commande
+- délai estimé
+- points gagnés par commande
+- nombre de points requis pour la livraison offerte
+- adresse
+- téléphone
+- horaires / message d'ouverture
+- jour de recrutement
+- activer/désactiver livraison ou retrait
+
+## 5. Déploiement Render
+
+Ce projet est un **site statique**. Sur Render, utilise **Static Site**, pas Web Service.
+
+Si `index.html` est directement à la racine du dépôt GitHub :
+- Root Directory : vide
+- Build Command : `echo "No build required"`
+- Publish Directory : `.`
+
+Si les fichiers sont dans le dossier `ltd_mobile_site` :
+- Root Directory : `ltd_mobile_site`
+- Build Command : `echo "No build required"`
+- Publish Directory : `.`
+
+Il n'y a aucun `Start Command` à mettre pour un Static Site.
+
+## Mode local sans Supabase
+
+Le site fonctionne aussi en mode local avec `localStorage`, mais les données restent uniquement sur l'appareil utilisé. Ce mode sert surtout à tester le design.
+
+Pour tester temporairement les écrans internes sans Supabase, ajoute à l'adresse :
+
+- `?demoRole=employee`
+- `?demoRole=manager`
+- `?demoRole=admin`
+
+Exemple : `index.html?demoRole=admin`
+
+## Fichiers
+
+- `index.html` : structure du site
+- `styles.css` : design mobile
+- `app.js` : boutique, commandes, fidélité, comptes, équipe et direction
+- `config.js` : connexion Supabase + valeurs de secours
+- `supabase.sql` : base de données, sécurité et fonctions serveur
