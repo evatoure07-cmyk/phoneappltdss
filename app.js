@@ -30,8 +30,8 @@ const defaults = {
     {id:'a2',title:'Service de livraison',body:'Commandez vos produits depuis votre téléphone et suivez chaque étape de votre commande.',type:'news',featured:false,active:true,created_at:new Date().toISOString()}
   ],
   contacts: [
-    {id:'c1',label:'Patron',name:'Blake Mars',phone:'À renseigner',sort_order:1,active:true},
-    {id:'c2',label:'Co-patronne',name:'Luciana Angel Mars',phone:'À renseigner',sort_order:2,active:true},
+    {id:'c1',label:'Gérant',name:'Blake Mars',phone:'À renseigner',sort_order:1,active:true},
+    {id:'c2',label:'Cogérante',name:'Luciana Angel Mars',phone:'À renseigner',sort_order:2,active:true},
     {id:'c3',label:'Accueil LTD',name:'LTD Sandy Shores',phone:'À renseigner',sort_order:3,active:true}
   ],
   promotions: [],
@@ -55,6 +55,8 @@ let currentPromo = null;
 let currentOrderMode = 'delivery';
 let staffFilter = 'active';
 let realtimeChannel = null;
+let modalLocked = false;
+let passwordPromptedFor = null;
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -65,7 +67,7 @@ const num = v => Number(v || 0);
 const money = v => `${num(v).toLocaleString('fr-FR', {maximumFractionDigits:2})} $`;
 const formatDate = v => new Date(v).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 const STAFF_ROLES = {
-  patron:'Patron', copatron:'Co-patron',
+  patron:'Gérant', copatron:'Cogérante',
   vendeur_novice:'Vendeur novice', vendeur_intermediaire:'Vendeur intermédiaire', vendeur_experimente:'Vendeur expérimenté',
   pompiste_novice:'Pompiste novice', pompiste_intermediaire:'Pompiste intermédiaire', pompiste_experimente:'Pompiste expérimenté',
   chef_equipe:'Chef d’équipe', livreur:'Livreur', responsable_pompiste:'Responsable pompiste', responsable_vente:'Responsable vente'
@@ -95,13 +97,38 @@ const can = permission => isDirection() || myPermissions.has(permission);
 const canManageAnything = () => isDirection() || [...MANAGEMENT_PERMS].some(p=>myPermissions.has(p));
 const iconRefresh = () => window.lucide && lucide.createIcons();
 
+const STAFF_EMAIL_DOMAIN = 'ltd-sandy-shores.example';
+const DIRECTION_USERNAMES = new Set(['luciana.angelmars','blake.mars']);
+const EMPLOYEE_ROLE_ENTRIES = Object.entries(STAFF_ROLES).filter(([k])=>!['patron','copatron'].includes(k));
+function normalizeStaffUsername(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,'.').replace(/[^a-z0-9._-]/g,'').replace(/\.{2,}/g,'.').replace(/^\.|\.$/g,'');
+}
+function staffEmail(username){ return `${normalizeStaffUsername(username)}@${STAFF_EMAIL_DOMAIN}`; }
+function makeUsername(first,last){ return normalizeStaffUsername(`${first}.${last}`); }
+function randomTempPassword(){
+  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const bytes=new Uint32Array(16);crypto.getRandomValues(bytes);
+  return 'LTD!' + [...bytes].map(x=>alphabet[x%alphabet.length]).join('');
+}
+async function invokeAdminUsers(body){
+  if(!hasSupabase) throw new Error('Cette action nécessite Supabase.');
+  const {data,error}=await sb.functions.invoke('admin-users',{body});
+  if(error){
+    const detail=error?.context?.body || error.message;
+    throw new Error(typeof detail==='string'?detail:'Fonction de gestion des comptes indisponible. Vérifiez son déploiement dans Supabase.');
+  }
+  if(data?.error) throw new Error(data.error);
+  return data;
+}
+
+
 function storageGet(key, fallback){ try{return JSON.parse(localStorage.getItem(key)) ?? fallback}catch{return fallback} }
 function storageSet(key, value){ localStorage.setItem(key, JSON.stringify(value)) }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),2400) }
-function openModal(html){ $('#modalContent').innerHTML=html; $('#modalBackdrop').classList.remove('hidden'); iconRefresh() }
-function closeModal(){ $('#modalBackdrop').classList.add('hidden') }
+function openModal(html,locked=false){ modalLocked=locked; $('#modalContent').innerHTML=html; $('#modalBackdrop').classList.remove('hidden'); iconRefresh() }
+function closeModal(force=false){ if(modalLocked&&!force)return; modalLocked=false; $('#modalBackdrop').classList.add('hidden') }
 window.closeModal = closeModal;
-$('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal()});
+$('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop'&&!modalLocked)closeModal()});
 
 function seedDemo(){
   demo.products = storageGet(LS.products, defaults.products);
@@ -189,7 +216,7 @@ async function getJobs(includeInactive=false){
 }
 
 function nav(name){
-  if(name==='staff'&&!isStaff())return showEmployeeAccess('login');
+  if(name==='staff'&&!isStaff())return showEmployeeAccess();
   if(name==='admin'&&!canManageAnything())return toast('Votre rôle n’a pas accès à l’administration.');
   $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
@@ -263,7 +290,7 @@ async function renderRecruitment(){
 async function renderContact(){
   await getSettings(); applySettingsToUI(); const [contacts,staffContacts]=await Promise.all([getContacts(),getPublicStaffContacts()]);
   const staffRoles=new Set(staffContacts.map(c=>c.staff_role));
-  const manual=contacts.filter(c=>!(staffRoles.has('patron')&&String(c.label||'').toLowerCase()==='patron') && !(staffRoles.has('copatron')&&String(c.label||'').toLowerCase().startsWith('co-patron')));
+  const manual=contacts.filter(c=>{const l=String(c.label||'').toLowerCase();return !(staffRoles.has('patron')&&['patron','gérant','gerant'].includes(l)) && !(staffRoles.has('copatron')&&['co-patronne','co-patron','copatronne','cogérante','cogerante'].includes(l));});
   $('#contactsList').innerHTML=[...staffContacts,...manual].map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
   iconRefresh();
 }
@@ -505,45 +532,57 @@ window.submitAuth=async mode=>{
     demo.user={id:'demo-user',email};demo.profile={id:'demo-user',display_name:($('#authName')?.value||email.split('@')[0]),phone:($('#authPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};storageSet(LS.profile,demo.profile);closeModal();await initAuth();toast('Compte créé.');
   }
 };
-function showEmployeeAccess(mode='login'){
+function showEmployeeAccess(){
   if(isStaff()){nav('staff');return}
-  const signing=mode==='signup';
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">ESPACE EMPLOYÉS</span><h3>${signing?'Créer mon compte équipe':'Connexion équipe'}</h3>${signing?`<div class="form-grid"><div class="form-group"><label>Prénom & nom</label><input id="staffAuthName" placeholder="Prénom Nom"></div><div class="form-group"><label>Téléphone</label><input id="staffAuthPhone" placeholder="Numéro"></div></div>`:''}<div class="form-group"><label>Email</label><input id="staffAuthEmail" type="email" placeholder="vous@exemple.com"></div><div class="form-group"><label>Mot de passe</label><input id="staffAuthPass" type="password" placeholder="••••••••"></div><div class="form-group"><label>Code d’accès ${signing?'':'(si votre compte n’est pas encore activé)'}</label><input id="staffAccessCode" autocomplete="one-time-code" placeholder="LTD-XXXX-XXXX"></div><div class="modal-actions"><button class="btn ghost" onclick="showEmployeeAccess('${signing?'login':'signup'}')">${signing?'J’ai déjà un compte':'Créer mon compte équipe'}</button><button class="btn primary" onclick="submitEmployeeAuth('${mode}')">${signing?'Créer & activer':'Se connecter'}</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">ESPACE EMPLOYÉS</span><h3>Connexion équipe</h3><p class="page-intro">Utilisez l’identifiant <strong>prénom.nom</strong> transmis par la direction.</p><div class="form-group"><label>Identifiant</label><input id="staffUsername" autocomplete="username" placeholder="prenom.nom"></div><div class="form-group"><label>Mot de passe</label><input id="staffAuthPass" type="password" autocomplete="current-password" placeholder="••••••••"></div><div class="modal-actions"><button class="btn primary" onclick="submitEmployeeAuth()">Se connecter</button></div><p class="subtle" style="margin-top:12px">Les comptes employés sont créés par la direction du LTD.</p>`);
 }
 window.showEmployeeAccess=showEmployeeAccess;
-async function redeemStaffCode(code){
-  code=String(code||'').trim();if(!code)return null;
-  if(hasSupabase){const {data,error}=await sb.rpc('redeem_staff_access_code',{p_code:code});if(error)throw error;return data}
-  const r=code.toUpperCase().startsWith('PATRON-')?'patron':code.toUpperCase().startsWith('COPATRON-')?'copatron':'livreur';
-  demo.profile.staff_role=r;demo.profile.role=['patron','copatron'].includes(r)?'admin':'employee';storageSet(LS.profile,demo.profile);return r;
-}
-window.submitEmployeeAuth=async mode=>{
-  const email=($('#staffAuthEmail')?.value||'').trim(),pass=$('#staffAuthPass')?.value||'',code=($('#staffAccessCode')?.value||'').trim();
-  if(!email||!pass)return toast('Email et mot de passe obligatoires.');if(mode==='signup'&&!code)return toast('Le code d’accès est obligatoire.');
+window.submitEmployeeAuth=async()=>{
+  const username=normalizeStaffUsername($('#staffUsername')?.value||''),pass=$('#staffAuthPass')?.value||'';
+  if(!username||!pass)return toast('Identifiant et mot de passe obligatoires.');
   try{
     if(hasSupabase){
-      if(mode==='signup'){
-        const name=($('#staffAuthName')?.value||'').trim()||'Employé',phone=($('#staffAuthPhone')?.value||'').trim();
-        const {data,error}=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name,phone}}});if(error)throw error;
-        if(data.session){await redeemStaffCode(code)}else{localStorage.setItem('ltd_pending_staff_code',code);toast('Compte créé. Confirmez l’email puis reconnectez-vous pour activer le code.');closeModal();return}
-      }else{
-        const {error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error;
-        const pending=code||localStorage.getItem('ltd_pending_staff_code')||'';if(pending){await redeemStaffCode(pending);localStorage.removeItem('ltd_pending_staff_code')}
+      let {error}=await sb.auth.signInWithPassword({email:staffEmail(username),password:pass});
+      if(error && DIRECTION_USERNAMES.has(username)){
+        try{await invokeAdminUsers({action:'bootstrap_direction',username,password:pass})}catch(bootErr){throw bootErr}
+        ({error}=await sb.auth.signInWithPassword({email:staffEmail(username),password:pass}));
       }
+      if(error)throw error;
     }else{
-      demo.user={id:'demo-staff',email};demo.profile=demo.profile||{id:'demo-staff',display_name:($('#staffAuthName')?.value||email.split('@')[0]),phone:($('#staffAuthPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};if(code)await redeemStaffCode(code);
+      const isLuci=username==='luciana.angelmars',isBlake=username==='blake.mars';
+      demo.user={id:'demo-staff',email:staffEmail(username)};
+      demo.profile={id:'demo-staff',display_name:isLuci?'Luciana Angel Mars':isBlake?'Blake Mars':username,staff_username:username,phone:'',favorite_address:'',role:(isLuci||isBlake)?'admin':'employee',staff_role:isLuci?'copatron':isBlake?'patron':'livreur',loyalty_points:0,must_change_password:false};storageSet(LS.profile,demo.profile);
     }
-    closeModal();await initAuth();isStaff()?nav('staff'):toast('Compte connecté, mais aucun accès employé n’est activé.');
-  }catch(err){toast(err.message||'Connexion impossible.');}
+    closeModal(true);await initAuth();isStaff()?nav('staff'):toast('Ce compte ne possède pas d’accès employé.');
+  }catch(err){toast(err.message==='Invalid login credentials'?'Identifiant ou mot de passe incorrect.':(err.message||'Connexion impossible.'));}
 };
-$('#employeeAccessBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
-$('#employeeFooterBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
-$('#homeEmployeeAccess')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
+
+function showPasswordChange(required=false){
+  if(!demo.user)return;
+  const title=required?'Nouveau mot de passe obligatoire':'Changer le mot de passe';
+  openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
+}
+window.showPasswordChange=showPasswordChange;
+window.saveMyNewPassword=async required=>{
+  const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
+  if(a.length<8)return toast('Le mot de passe doit contenir au moins 8 caractères.');
+  if(a!==b)return toast('Les deux mots de passe ne correspondent pas.');
+  try{
+    if(hasSupabase){const{error}=await sb.auth.updateUser({password:a});if(error)throw error;if(isStaff()){const r=await sb.rpc('mark_password_changed');if(r.error)throw r.error}}
+    if(demo.profile)demo.profile.must_change_password=false;
+    modalLocked=false;closeModal(true);passwordPromptedFor=null;await initAuth();toast('Mot de passe modifié.');
+  }catch(err){toast(err.message||'Impossible de modifier le mot de passe.');}
+};
+window.logoutFromPasswordPrompt=async()=>{modalLocked=false;if(hasSupabase)await sb.auth.signOut();demo.user=null;demo.profile=null;localStorage.removeItem(LS.profile);closeModal(true);await initAuth();};
+$('#employeeAccessBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess());
+$('#employeeFooterBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess());
+$('#homeEmployeeAccess')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess());
 $('#accountBtn')?.addEventListener('click',showAccount);
 function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Employé',manager:'Responsable',admin:'Direction'})[r]||r}
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong><span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="closeModal();nav('staff')"><i data-lucide="clipboard-check"></i> Espace équipe</button><button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  const identity=isStaff()&&demo.profile.staff_username?`<span>@${esc(demo.profile.staff_username)}</span>`:'';
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showPasswordChange(false)"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="closeModal();nav('staff')"><i data-lucide="clipboard-check"></i> Espace équipe</button><button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
 }
 window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
 async function uploadAvatar(file){
@@ -648,7 +687,7 @@ async function adminRecruitment(){const jobs=await getJobs(true);demo.jobs=jobs;
 window.toggleJobRecruitment=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('jobs').update({active:!current}).eq('id',id);if(error)return toast(error.message)}else{const j=demo.jobs.find(x=>String(x.id)===String(id));if(j)j.active=!current;storageSet(LS.jobs,demo.jobs)}toast(!current?'Recrutement ouvert.':'Recrutement fermé.');adminRecruitment();};
 
 async function adminPermissions(role='vendeur_novice'){
-  if(!isDirection())return toast('Seuls le Patron et le Co-patron peuvent modifier les permissions.');let enabled=[];
+  if(!isDirection())return toast('Seuls le Gérant et la Cogérante peuvent modifier les permissions.');let enabled=[];
   if(hasSupabase){const{data,error}=await sb.from('role_permissions').select('permission_key,enabled').eq('staff_role',role);if(error)return toast(error.message);enabled=(data||[]).filter(x=>x.enabled).map(x=>x.permission_key)}else enabled=[];
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Permissions des rôles</h3><div class="form-group"><label>Rôle à configurer</label><select id="permissionRole">${Object.entries(STAFF_ROLES).filter(([k])=>!['patron','copatron'].includes(k)).map(([k,v])=>`<option value="${k}" ${k===role?'selected':''}>${esc(v)}</option>`).join('')}</select></div><div class="permission-grid">${PERMISSION_DEFS.map(p=>`<label class="permission-row"><div><strong>${esc(p.label)}</strong><span>${esc(p.desc)}</span></div><input type="checkbox" class="perm-check" value="${p.key}" ${enabled.includes(p.key)?'checked':''}></label>`).join('')}</div><div class="modal-actions"><button class="btn primary" onclick="saveRolePermissions()">Enregistrer</button></div>`);$('#permissionRole').addEventListener('change',e=>adminPermissions(e.target.value));
 }
@@ -667,13 +706,24 @@ window.saveContact=async id=>{const x={label:$('#contactLabel').value.trim(),nam
 function adminSettings(){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Paramètres</h3><label class="checkbox-row"><input type="checkbox" id="setOpen" ${settings.business_open?'checked':''}> Commandes ouvertes</label><div class="form-grid"><div class="form-group"><label>Frais livraison</label><input id="setFee" type="number" min="0" value="${num(settings.delivery_fee)}"></div><div class="form-group"><label>Minimum commande</label><input id="setMin" type="number" min="0" value="${num(settings.min_order)}"></div></div><div class="form-grid"><div class="form-group"><label>Délai min (min)</label><input id="setEtaMin" type="number" min="0" value="${num(settings.delivery_eta_min)}"></div><div class="form-group"><label>Délai max (min)</label><input id="setEtaMax" type="number" min="0" value="${num(settings.delivery_eta_max)}"></div></div><div class="form-grid"><div class="form-group"><label>Points / commande</label><input id="setPoints" type="number" min="0" value="${num(settings.points_per_order)}"></div><div class="form-group"><label>Seuil récompense</label><input id="setReward" type="number" min="1" value="${num(settings.loyalty_reward_points)}"></div></div><div class="form-group"><label>Adresse</label><input id="setAddress" value="${esc(settings.address)}"></div><div class="form-group"><label>Téléphone du LTD</label><input id="setPhone" value="${esc(settings.phone)}"></div><div class="form-group"><label>Horaires / information d’ouverture</label><input id="setHours" value="${esc(settings.hours_text)}"></div><div class="form-group"><label>Jour de recrutement</label><input id="setRecruit" value="${esc(settings.recruitment_day)}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="setDelivery" ${settings.delivery_enabled?'checked':''}> Livraison</label><label class="checkbox-row"><input type="checkbox" id="setPickup" ${settings.pickup_enabled?'checked':''}> Retrait LTD</label></div><div class="modal-actions"><button class="btn primary" onclick="saveSettings()">Enregistrer</button></div>`)}
 window.saveSettings=async()=>{const x={business_open:$('#setOpen').checked,delivery_fee:num($('#setFee').value),min_order:num($('#setMin').value),delivery_eta_min:num($('#setEtaMin').value),delivery_eta_max:num($('#setEtaMax').value),points_per_order:num($('#setPoints').value),loyalty_reward_points:num($('#setReward').value),address:$('#setAddress').value.trim(),phone:$('#setPhone').value.trim(),hours_text:$('#setHours').value.trim(),recruitment_day:$('#setRecruit').value.trim(),delivery_enabled:$('#setDelivery').checked,pickup_enabled:$('#setPickup').checked};if(hasSupabase){const{error}=await sb.from('site_settings').update(x).eq('id','main');if(error)return toast(error.message)}else{Object.assign(settings,x);storageSet(LS.settings,settings)}Object.assign(settings,x);closeModal();applySettingsToUI();toast('Paramètres enregistrés.')};
 async function adminTeam(){
-  let users=[];if(hasSupabase){const {data,error}=await sb.from('profiles').select('id,display_name,phone,role,staff_role,avatar_url,show_phone,profile_bio').not('staff_role','is',null).order('display_name');if(error)return toast(error.message);users=data||[]}else users=demo.profile?.staff_role?[demo.profile]:[];
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Équipe & accès</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon">${u.avatar_url?`<img src="${esc(u.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="">`:'<i data-lucide="user-round"></i>'}</div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(roleLabel(u.staff_role||u.role))} • ${u.show_phone?esc(u.phone||''):'numéro privé'}</p></div><div class="catalog-actions">${isDirection()?`<button onclick="changeStaffRolePrompt('${u.id}','${u.staff_role||''}')"><i data-lucide="shield"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun compte employé.</div>'}</div>${isDirection()?`<button class="btn primary" style="width:100%;margin-top:13px" onclick="showCreateStaffAccess()"><i data-lucide="key-round"></i> Créer un accès employé</button>`:''}`);iconRefresh();
+  let users=[];if(hasSupabase){const {data,error}=await sb.from('profiles').select('id,display_name,phone,role,staff_role,staff_username,avatar_url,show_phone,profile_bio,must_change_password').not('staff_role','is',null).order('display_name');if(error)return toast(error.message);users=data||[]}else users=demo.profile?.staff_role?[demo.profile]:[];
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Équipe & comptes</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon">${u.avatar_url?`<img src="${esc(u.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="">`:'<i data-lucide="user-round"></i>'}</div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(roleLabel(u.staff_role||u.role))}${u.staff_username?` • @${esc(u.staff_username)}`:''} • ${u.show_phone?esc(u.phone||''):'numéro privé'}${u.must_change_password?' • mot de passe temporaire':''}</p></div><div class="catalog-actions">${isDirection()?`<button onclick="resetStaffPasswordPrompt('${u.id}','${esc(u.staff_username||'')}')" title="Réinitialiser le mot de passe"><i data-lucide="key-round"></i></button><button onclick="changeStaffRolePrompt('${u.id}','${u.staff_role||''}')" title="Modifier le rôle"><i data-lucide="shield"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun compte employé.</div>'}</div>${isDirection()?`<button class="btn primary" style="width:100%;margin-top:13px" onclick="showCreateStaffAccount()"><i data-lucide="user-round-plus"></i> Créer un compte employé</button>`:''}`);iconRefresh();
 }
-window.showCreateStaffAccess=()=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Créer un accès employé</h3><div class="form-group"><label>Rôle</label><select id="staffInviteRole">${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></div><div class="form-group"><label>Nombre d’utilisations</label><input id="staffInviteUses" type="number" min="1" max="20" value="1"></div><div class="form-group"><label>Libellé (facultatif)</label><input id="staffInviteLabel" placeholder="Ex : accès de Maritza"></div><div class="modal-actions"><button class="btn primary" onclick="createStaffAccess()">Générer le code</button></div>`);
-window.createStaffAccess=async()=>{const role=$('#staffInviteRole').value,uses=Math.max(1,Math.min(20,Math.floor(num($('#staffInviteUses').value)||1))),label=$('#staffInviteLabel').value.trim();let code='';if(hasSupabase){const{data,error}=await sb.rpc('create_staff_access_code',{p_staff_role:role,p_max_uses:uses,p_label:label||null});if(error)return toast(error.message);code=Array.isArray(data)?data[0]?.code:data?.code||data}else{code=`LTD-${Math.random().toString(36).slice(2,6).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`}
-  openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Code créé</h3><div class="access-code-box"><small>${esc(roleLabel(role))} • ${uses} utilisation${uses>1?'s':''}</small><code>${esc(code)}</code></div><p class="page-intro">Donnez ce code uniquement à la personne concernée. Elle pourra créer son compte depuis « Espace employés ».</p><button class="btn primary full" onclick="navigator.clipboard?.writeText('${esc(code)}');toast('Code copié.')"><i data-lucide="copy"></i> Copier le code</button>`);iconRefresh();
+window.showCreateStaffAccount=()=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Créer un compte employé</h3><div class="form-grid"><div class="form-group"><label>Prénom</label><input id="newStaffFirst" placeholder="Prénom"></div><div class="form-group"><label>Nom</label><input id="newStaffLast" placeholder="Nom"></div></div><div class="form-group"><label>Identifiant</label><input id="newStaffUsername" placeholder="prenom.nom"><small>Format recommandé : prénom.nom</small></div><div class="form-grid"><div class="form-group"><label>Téléphone</label><input id="newStaffPhone" placeholder="Numéro"></div><div class="form-group"><label>Rôle</label><select id="newStaffRole">${EMPLOYEE_ROLE_ENTRIES.map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></div></div><div class="form-group"><label>Mot de passe temporaire</label><div class="inline-input"><input id="newStaffPassword" value="${esc(randomTempPassword())}"><button class="btn mini" onclick="document.getElementById('newStaffPassword').value=randomTempPassword()" type="button"><i data-lucide="refresh-cw"></i></button></div></div><div class="modal-actions"><button class="btn primary" onclick="createStaffAccount()">Créer le compte</button></div>`);
+window.randomTempPassword=randomTempPassword;
+window.createStaffAccount=async()=>{
+  const first=($('#newStaffFirst')?.value||'').trim(),last=($('#newStaffLast')?.value||'').trim(),phone=($('#newStaffPhone')?.value||'').trim(),role=$('#newStaffRole')?.value,password=$('#newStaffPassword')?.value||'';
+  const username=normalizeStaffUsername(($('#newStaffUsername')?.value||'').trim()||makeUsername(first,last));
+  if(!first||!last||!username||!username.includes('.'))return toast('Renseignez prénom, nom et un identifiant prénom.nom.');
+  if(password.length<8)return toast('Le mot de passe temporaire doit contenir au moins 8 caractères.');
+  try{
+    if(hasSupabase)await invokeAdminUsers({action:'create_staff',username,password,display_name:`${first} ${last}`.trim(),phone,staff_role:role});
+    else toast('Compte simulé créé.');
+    openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><span class="eyebrow">COMPTE CRÉÉ</span><h3>${esc(first)} ${esc(last)}</h3><div class="access-code-box"><small>Identifiant</small><code>${esc(username)}</code></div><div class="access-code-box"><small>Mot de passe temporaire</small><code>${esc(password)}</code></div><p class="page-intro">À la première connexion, l’employé devra obligatoirement choisir un nouveau mot de passe.</p><button class="btn primary full" onclick="navigator.clipboard?.writeText('${esc(username)} / ${esc(password)}');toast('Identifiants copiés.')"><i data-lucide="copy"></i> Copier les identifiants</button>`);iconRefresh();
+  }catch(err){toast(err.message||'Impossible de créer le compte.');}
 };
+window.resetStaffPasswordPrompt=(id,username)=>{const temp=randomTempPassword();openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Réinitialiser le mot de passe</h3><p class="page-intro">Le prochain mot de passe sera temporaire et devra être changé à la connexion.</p><div class="form-group"><label>Identifiant</label><input value="${esc(username)}" disabled></div><div class="form-group"><label>Nouveau mot de passe temporaire</label><input id="resetStaffPass" value="${esc(temp)}"></div><div class="modal-actions"><button class="btn primary" onclick="confirmStaffPasswordReset('${id}','${esc(username)}')">Réinitialiser</button></div>`)};
+window.confirmStaffPasswordReset=async(id,username)=>{const password=$('#resetStaffPass')?.value||'';if(password.length<8)return toast('8 caractères minimum.');try{if(hasSupabase)await invokeAdminUsers({action:'reset_staff_password',user_id:id,password});openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Mot de passe réinitialisé</h3><div class="access-code-box"><small>${esc(username)}</small><code>${esc(password)}</code></div><p class="page-intro">Transmettez ce mot de passe à la personne concernée. Elle devra le modifier à sa prochaine connexion.</p>`)}catch(err){toast(err.message||'Réinitialisation impossible.')}};
 window.changeStaffRolePrompt=(id,role)=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Modifier le rôle</h3><div class="form-group"><label>Rôle</label><select id="staffRoleSelect"><option value="">Retirer l’accès employé</option>${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}" ${role===k?'selected':''}>${esc(v)}</option>`).join('')}</select></div><div class="modal-actions"><button class="btn primary" onclick="saveStaffRole('${id}')">Enregistrer</button></div>`);
 window.saveStaffRole=async id=>{const role=$('#staffRoleSelect').value||null;if(hasSupabase){const{error}=await sb.rpc('admin_set_staff_role',{p_user_id:id,p_staff_role:role});if(error)return toast(error.message)}else if(String(id)===String(demo.profile?.id)){demo.profile.staff_role=role;demo.profile.role=role?(['patron','copatron'].includes(role)?'admin':'employee'):'customer';storageSet(LS.profile,demo.profile)}toast('Rôle mis à jour.');adminTeam();};
 window.adjustPointsPrompt=(id,current)=>openModal(`<button class="icon-btn close" onclick="adminCustomers()">×</button><h3>Points fidélité</h3><div class="loyalty-box"><strong>${current} points actuellement</strong><div>Nombre positif pour ajouter, négatif pour retirer.</div></div><div class="form-group"><label>Ajustement</label><input id="pointsDelta" type="number" value="10"></div><div class="form-group"><label>Motif</label><input id="pointsReason" placeholder="Ex : geste commercial"></div><div class="modal-actions"><button class="btn primary" onclick="savePointsAdjustment('${id}')">Valider</button></div>`);
@@ -692,10 +742,11 @@ window.setPartnershipStatus=async(id,status)=>{
 
 async function adminCustomers(){
   let users=[];
-  if(hasSupabase){const{data}=await sb.from('profiles').select('id,display_name,phone,role,staff_role,loyalty_points,created_at').order('created_at',{ascending:false}).limit(100);users=data||[]}
-  else users=demo.profile?[demo.profile]:[];
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Clients</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="user-round"></i></div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(u.phone||'Téléphone non renseigné')} • ${num(u.loyalty_points)} pts • ${roleLabel(u.staff_role||u.role)}</p></div><div class="catalog-actions"><button onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})" title="Ajuster les points"><i data-lucide="gift"></i></button>${isDirection()&&u.staff_role?`<button onclick="changeStaffRolePrompt('${u.id}','${u.staff_role}')" title="Modifier le rôle employé"><i data-lucide="shield"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun client.</div>'}</div>`);iconRefresh();
+  if(hasSupabase){const{data,error}=await sb.from('profiles').select('id,display_name,email,phone,role,staff_role,loyalty_points,created_at').is('staff_role',null).order('created_at',{ascending:false}).limit(100);if(error)return toast(error.message);users=data||[]}
+  else users=demo.profile&&!demo.profile.staff_role?[demo.profile]:[];
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Comptes clients</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="user-round"></i></div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(u.email||'Email non renseigné')} • ${esc(u.phone||'Téléphone non renseigné')} • ${num(u.loyalty_points)} pts</p></div><div class="catalog-actions"><button onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})" title="Ajuster les points"><i data-lucide="gift"></i></button>${u.email?`<button onclick="requestClientPasswordReset('${esc(u.email)}')" title="Envoyer une réinitialisation de mot de passe"><i data-lucide="mail-key"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun client.</div>'}</div><p class="subtle" style="margin-top:12px">Les clients choisissent eux-mêmes leur mot de passe lors de l’inscription. La direction peut leur envoyer un lien de réinitialisation par email.</p>`);iconRefresh();
 }
+window.requestClientPasswordReset=async email=>{if(!hasSupabase)return toast('Cette action nécessite Supabase.');try{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;toast('Email de réinitialisation envoyé.')}catch(err){toast(err.message||'Envoi impossible.')}};
 
 async function initAuth(){
   if(!hasSupabase)demo.profile=storageGet(LS.profile,null);else await getCurrentProfile();
@@ -703,9 +754,10 @@ async function initAuth(){
   const staff=isStaff();$('#staffNav').classList.toggle('hidden',!staff);if(!staff&&$('#staffView').classList.contains('active'))nav('home');
   if(!canManageAnything()&&$('#adminView').classList.contains('active'))nav('home');
   applySettingsToUI();renderHome();initRealtime();
+  if(demo.profile?.must_change_password && passwordPromptedFor!==demo.profile.id){passwordPromptedFor=demo.profile.id;setTimeout(()=>showPasswordChange(true),180)}
 }
 
 (async function init(){
   seedDemo();iconRefresh();await initAuth();demo.promotions=await getPromotions();demo.jobs=await getJobs();renderShop();
-  if(hasSupabase)sb.auth.onAuthStateChange(()=>setTimeout(initAuth,100));
+  if(hasSupabase)sb.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY')setTimeout(()=>showPasswordChange(false),200);setTimeout(initAuth,100)});
 })();

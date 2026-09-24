@@ -1,4 +1,4 @@
--- LTD Sandy Shores — Base Supabase V2
+-- LTD Sandy Shores — Base Supabase V6
 -- Compatible avec une installation V1 : ce script ajoute/actualise les colonnes et règles nécessaires.
 -- Supabase > SQL Editor > New query > coller tout ce fichier > Run.
 
@@ -1011,3 +1011,115 @@ where not exists(select 1 from public.jobs where title='Pompiste');
 insert into public.jobs(title,description,active)
 select 'Livreur / Livreuse','Préparation et acheminement des commandes clients.',true
 where not exists(select 1 from public.jobs where title='Livreur / Livreuse');
+
+-- ==========================================================
+-- V6 — COMPTES NOMINATIFS, MOTS DE PASSE TEMPORAIRES & DIRECTION
+-- ==========================================================
+
+alter table public.profiles add column if not exists email text;
+alter table public.profiles add column if not exists staff_username text;
+alter table public.profiles add column if not exists must_change_password boolean not null default false;
+create unique index if not exists profiles_staff_username_unique on public.profiles (lower(staff_username)) where staff_username is not null;
+
+-- Conserve l'email des clients dans le profil afin que la direction puisse leur
+-- envoyer un lien de réinitialisation sans accéder à leur mot de passe.
+update public.profiles p set email=u.email
+from auth.users u where u.id=p.id and (p.email is null or p.email='');
+
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.profiles (id, display_name, phone, email, staff_username)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email,'@',1)),
+    coalesce(new.raw_user_meta_data->>'phone',''),
+    new.email,
+    nullif(new.raw_user_meta_data->>'staff_username','')
+  )
+  on conflict (id) do update set
+    email=excluded.email,
+    staff_username=coalesce(public.profiles.staff_username,excluded.staff_username);
+  return new;
+end; $$;
+
+-- Les anciens codes d'accès ne servent plus à créer les comptes employés.
+update public.staff_access_codes set active=false where active=true;
+
+-- Retire les anciens accès génériques de direction. Les profils nominatifs
+-- luciana.angelmars et blake.mars, une fois créés, restent bien direction.
+update public.profiles
+set staff_role=null, role='customer'
+where staff_role in ('patron','copatron')
+  and coalesce(lower(staff_username),'') not in ('luciana.angelmars','blake.mars');
+
+-- Terminologie publique demandée.
+update public.contacts set label='Gérant', name='Blake Mars' where lower(label) in ('patron','gérant') or lower(name)='blake mars';
+update public.contacts set label='Cogérante', name='Luciana Angel Mars' where lower(label) in ('co-patronne','co-patron','copatronne','cogérante') or lower(name)='luciana angel mars';
+
+-- Bootstrap sécurisé des deux comptes direction. Les mots de passe temporaires
+-- ne sont jamais stockés en clair : uniquement sel + SHA-256.
+create table if not exists public.direction_bootstrap (
+  username text primary key,
+  display_name text not null,
+  staff_role text not null check (staff_role in ('patron','copatron')),
+  salt text not null,
+  password_hash text not null,
+  used boolean not null default false,
+  used_at timestamptz
+);
+alter table public.direction_bootstrap enable row level security;
+revoke all on public.direction_bootstrap from anon,authenticated;
+
+insert into public.direction_bootstrap(username,display_name,staff_role,salt,password_hash,used)
+values
+  ('luciana.angelmars','Luciana Angel Mars','copatron','cbdce8d386d469bbc278b0067de3828f','4f8d3539549396d8dbbdb6ba51a54f5c4971c560c67d361c15b8c721eb5544c7',false),
+  ('blake.mars','Blake Mars','patron','f4cbc4aa0f6b23e330817ad2a3d6e488','f4eb033cf42e8a70c052ec64bbc135c464f1b973993258c81688f2cd74f7f82a',false)
+on conflict (username) do update set
+  display_name=excluded.display_name,
+  staff_role=excluded.staff_role,
+  salt=excluded.salt,
+  password_hash=excluded.password_hash;
+
+-- Si le script est rejoué après activation, ne réactive jamais les identifiants temporaires.
+update public.direction_bootstrap b set used=true,used_at=coalesce(used_at,now())
+where exists(select 1 from public.profiles p where lower(p.staff_username)=lower(b.username) and p.staff_role=b.staff_role);
+
+create or replace function public.mark_password_changed() returns void
+language plpgsql security definer set search_path=public as $$
+begin
+  if auth.uid() is null then raise exception 'Connexion requise'; end if;
+  update public.profiles set must_change_password=false where id=auth.uid();
+end; $$;
+grant execute on function public.mark_password_changed() to authenticated;
+
+-- Contacts publics des employés avec les nouveaux libellés direction.
+create or replace function public.get_public_staff_contacts()
+returns table(id uuid,name text,phone text,label text,avatar_url text,bio text,staff_role text)
+language sql stable security definer set search_path=public as $$
+  select p.id,
+         p.display_name,
+         p.phone,
+         case p.staff_role
+           when 'patron' then 'Gérant'
+           when 'copatron' then 'Cogérante'
+           when 'responsable_vente' then 'Responsable vente'
+           when 'responsable_pompiste' then 'Responsable pompiste'
+           when 'chef_equipe' then 'Chef d’équipe'
+           when 'livreur' then 'Livreur'
+           when 'vendeur_experimente' then 'Vendeur expérimenté'
+           when 'vendeur_intermediaire' then 'Vendeur intermédiaire'
+           when 'vendeur_novice' then 'Vendeur novice'
+           when 'pompiste_experimente' then 'Pompiste expérimenté'
+           when 'pompiste_intermediaire' then 'Pompiste intermédiaire'
+           when 'pompiste_novice' then 'Pompiste novice'
+           else 'Équipe LTD'
+         end,
+         coalesce(p.avatar_url,''),
+         coalesce(p.profile_bio,''),
+         p.staff_role
+  from public.profiles p
+  where p.staff_role is not null and p.show_phone=true
+  order by case when p.staff_role='patron' then 0 when p.staff_role='copatron' then 1 else 2 end, p.display_name;
+$$;
+grant execute on function public.get_public_staff_contacts() to anon,authenticated;

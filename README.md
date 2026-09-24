@@ -1,78 +1,90 @@
-# LTD Sandy Shores — Mobile V5
+# LTD Sandy Shores — V6
 
-Cette version transforme la V4 en site officiel + espace employés complet.
+Cette version garde le design et les fonctions de la V5, mais remplace les anciens codes d’accès par de vrais **comptes nominatifs employés**.
 
-## Nouveautés V5
+## Connexion
 
-- Bouton **Espace employés** dans le site.
-- Comptes employés activés avec un **code d'accès**.
-- Rôles disponibles : Patron, Co-patron, Vendeur novice / intermédiaire / expérimenté, Pompiste novice / intermédiaire / expérimenté, Chef d'équipe, Livreur, Responsable pompiste et Responsable vente.
-- Patron et Co-patron ont **exactement les mêmes droits** et peuvent générer des codes employés.
-- Gestion des permissions par rôle avec des **cases à cocher**.
-- Profil employé : photo, nom, téléphone, petite présentation et choix d'afficher ou non son numéro dans les contacts publics.
-- Annonces : titre + texte, publication et suppression depuis l'administration.
-- Recrutement : plus de candidature sur le site. La direction choisit si Vendeur/Vendeuse, Pompiste et Livreur/Livreuse **recrutent / ne recrutent pas**.
-- Packs : création d'un pack, prix, description, composition détaillée, quantités et **Pack du mois**.
-- Animations de changement de page, modales et cartes.
-- Les accès sensibles sont contrôlés par Supabase/RLS : masquer un bouton dans le navigateur ne suffit pas pour obtenir un droit.
+### Clients
+Les habitants créent eux-mêmes leur compte avec leur **email** et le **mot de passe de leur choix**. Ils n’utilisent jamais de mot de passe temporaire à l’inscription.
 
-## Installation / mise à jour
+### Équipe LTD
+Les employés se connectent avec un identifiant au format **prénom.nom** et un mot de passe.
 
-1. Remplace les fichiers de ton dépôt GitHub par ceux de ce dossier.
-2. Dans Supabase : **SQL Editor > New query**.
-3. Copie tout le contenu de `supabase.sql` puis clique sur **Run**.
-4. Vérifie que `config.js` contient toujours ton URL Supabase et ta clé `anon`.
-5. Redéploie ton Static Site Render.
+- La direction crée les comptes employés depuis **Administration > Équipe & comptes**.
+- Le premier mot de passe est temporaire.
+- À la première connexion, le site oblige l’employé à choisir un nouveau mot de passe.
+- Le Gérant et la Cogérante peuvent réinitialiser le mot de passe d’un employé ; le nouveau mot de passe redevient temporaire jusqu’à son changement.
 
-Le script SQL est prévu pour mettre à jour la V4/V3 sans supprimer les commandes ou les comptes existants.
+Les anciens codes Patron / Co-patron et les codes employés de la V5 sont désactivés par la migration V6.
 
-## Premier accès Patron / Co-patron
+## Direction
 
-Les deux codes initiaux ne sont **pas écrits en clair dans les fichiers du site**. `supabase.sql` contient uniquement leurs empreintes cryptographiques. Garde les codes que ChatGPT t'a fournis dans la conversation en privé.
+Les deux comptes initiaux sont :
 
-Pour activer un compte direction :
+- **Blake Mars** — Gérant — identifiant `blake.mars`
+- **Luciana Angel Mars** — Cogérante — identifiant `luciana.angelmars`
+
+Leurs mots de passe temporaires ne sont pas stockés en clair dans les fichiers. Ils ont été fournis séparément dans la conversation. À la première connexion, le changement de mot de passe est obligatoire.
+
+Gérant et Cogérante ont exactement les mêmes droits complets.
+
+## Comptes clients et réinitialisation
+
+Dans **Administration > Clients**, la direction peut :
+
+- consulter les comptes clients ;
+- voir les points fidélité ;
+- ajuster les points ;
+- envoyer un **email de réinitialisation du mot de passe**.
+
+La direction ne voit jamais le mot de passe actuel d’un client.
+
+## Installation V6
+
+1. Remplace les fichiers GitHub par ceux de cette V6.
+2. Dans Supabase, ouvre **SQL Editor**, colle tout `supabase.sql`, puis exécute-le.
+3. Vérifie `config.js` : uniquement l’URL Supabase et la clé publique `anon`.
+4. Déploie la fonction Supabase `admin-users` fournie dans :
+   `supabase/functions/admin-users/index.ts`.
+   **Important : désactive “Verify JWT” pour cette fonction.** Le bootstrap initial de la direction doit fonctionner avant la première connexion ; les actions sensibles vérifient ensuite elles-mêmes que l’appelant est Gérant ou Cogérante.
+5. Redéploie le site Render.
+
+### Déployer la fonction depuis le Dashboard Supabase
+
+Dans ton projet Supabase :
+
+1. **Edge Functions** → **Deploy a new function**.
+2. Nom : `admin-users`.
+3. Remplace le code par le contenu du fichier `supabase/functions/admin-users/index.ts`.
+4. Désactive **Verify JWT** pour cette fonction, puis déploie.
+
+Les secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` sont utilisés **uniquement dans la fonction serveur**. Ne copie jamais la clé `service_role` dans `config.js` ou dans le JavaScript du site.
+
+## Premier accès direction
+
+Une fois `supabase.sql` exécuté et la fonction `admin-users` déployée :
 
 1. Ouvre **Espace employés**.
-2. Clique sur **Créer mon compte équipe**.
-3. Renseigne nom, téléphone, email, mot de passe et le code Patron ou Co-patron.
-4. Une fois connecté, ouvre **Administration > Équipe & accès** pour générer les codes des autres employés.
+2. Connecte-toi avec `blake.mars` ou `luciana.angelmars` et le mot de passe temporaire fourni.
+3. Le site crée le compte direction lors de cette première connexion.
+4. Un écran oblige immédiatement à remplacer le mot de passe temporaire.
+5. Ensuite : **Administration > Équipe & comptes** pour créer les autres employés.
 
-> Si Supabase demande une confirmation d'email, confirme l'email puis reconnecte-toi. Le site conservera temporairement le code pour l'activer à la connexion suivante.
+## Création d’un employé
 
-## Permissions
+Dans **Administration > Équipe & comptes** :
 
-Dans **Administration > Permissions**, Patron ou Co-patron choisit un rôle puis coche les accès souhaités : commandes, catalogue, packs, annonces, promotions, recrutement, contacts, équipe, clients, partenariats, paramètres et statistiques.
+1. indique prénom, nom, téléphone et rôle ;
+2. l’identifiant suit le format `prenom.nom` ;
+3. le site génère un mot de passe temporaire sécurisé ;
+4. transmets l’identifiant et le mot de passe à l’employé ;
+5. lors de sa première connexion, il doit changer le mot de passe.
 
-Les droits Patron / Co-patron sont toujours complets et ne peuvent pas être réduits.
+Rôles disponibles : Vendeur novice, Vendeur intermédiaire, Vendeur expérimenté, Pompiste novice, Pompiste intermédiaire, Pompiste expérimenté, Chef d’équipe, Livreur, Responsable pompiste et Responsable vente.
 
-## Recrutement
+Les permissions de ces rôles restent configurables par cases à cocher dans **Administration > Permissions**.
 
-Dans **Administration > Recrutement**, active ou désactive chaque poste. Le public voit alors :
 
-- `RECRUTE`
-- `NE RECRUTE PAS`
+### Réinitialisation des clients
 
-Le site ne possède plus de formulaire de candidature pour ces postes : les candidats doivent venir directement au LTD.
-
-## Photos de profil
-
-Les photos utilisent le bucket Supabase public `staff-avatars`, créé automatiquement par `supabase.sql`. Chaque employé ne peut modifier que les fichiers de son propre dossier.
-
-## Packs
-
-Dans **Administration > Packs** :
-
-- crée ou modifie un pack ;
-- choisis son prix ;
-- sélectionne les produits contenus ;
-- indique les quantités ;
-- coche **Pack du mois** pour le mettre en avant.
-
-Un seul pack doit être mis en avant à la fois : quand un nouveau Pack du mois est enregistré, les anciens sont automatiquement désélectionnés.
-
-## Sécurité importante
-
-- Ne mets jamais la clé `service_role` Supabase dans `config.js` ou dans GitHub.
-- Seule la clé publique `anon` doit être utilisée dans le navigateur.
-- Les codes Patron / Co-patron doivent rester privés.
-- Les codes employés générés depuis l'administration peuvent être configurés pour une ou plusieurs utilisations.
+Pour que les liens de récupération reviennent correctement vers le site, ajoute aussi l’URL Render de ton site dans **Supabase > Authentication > URL Configuration > Redirect URLs**.
