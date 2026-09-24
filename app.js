@@ -5,7 +5,7 @@ const sb = hasSupabase ? window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE
 const LS = {
   profile: 'ltd_v2_profile', orders: 'ltd_v2_orders', products: 'ltd_v2_products',
   announcements: 'ltd_v2_announcements', contacts: 'ltd_v2_contacts', settings: 'ltd_v2_settings',
-  promotions: 'ltd_v2_promotions', jobs: 'ltd_v2_jobs', applications: 'ltd_v2_applications', partnerships: 'ltd_v3_partnerships'
+  promotions: 'ltd_v2_promotions', jobs: 'ltd_v2_jobs', applications: 'ltd_v2_applications', partnerships: 'ltd_v3_partnerships', packItems: 'ltd_v5_pack_items'
 };
 
 const defaults = {
@@ -46,7 +46,8 @@ const demo = {
   profile: null, user: null, cart: [], products: [], announcements: [], contacts: [], promotions: [], jobs: [],
   orders: JSON.parse(localStorage.getItem(LS.orders) || '[]'),
   applications: JSON.parse(localStorage.getItem(LS.applications) || '[]'),
-  partnerships: JSON.parse(localStorage.getItem(LS.partnerships) || '[]')
+  partnerships: JSON.parse(localStorage.getItem(LS.partnerships) || '[]'),
+  packItems: JSON.parse(localStorage.getItem(LS.packItems) || '[]'), permissions: []
 };
 let settings = {...defaults.settings};
 let activeCategory = 'Tous';
@@ -63,8 +64,35 @@ const esc = value => String(value ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;',
 const num = v => Number(v || 0);
 const money = v => `${num(v).toLocaleString('fr-FR', {maximumFractionDigits:2})} $`;
 const formatDate = v => new Date(v).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-const isStaff = () => ['employee','manager','admin'].includes(demo.profile?.role);
-const isDirection = () => ['manager','admin'].includes(demo.profile?.role);
+const STAFF_ROLES = {
+  patron:'Patron', copatron:'Co-patron',
+  vendeur_novice:'Vendeur novice', vendeur_intermediaire:'Vendeur intermédiaire', vendeur_experimente:'Vendeur expérimenté',
+  pompiste_novice:'Pompiste novice', pompiste_intermediaire:'Pompiste intermédiaire', pompiste_experimente:'Pompiste expérimenté',
+  chef_equipe:'Chef d’équipe', livreur:'Livreur', responsable_pompiste:'Responsable pompiste', responsable_vente:'Responsable vente'
+};
+const PERMISSION_DEFS = [
+  {key:'orders_view',label:'Voir les commandes',desc:'Accéder aux commandes clients et à leur suivi.'},
+  {key:'orders_claim',label:'Prendre une commande',desc:'S’attribuer une commande disponible.'},
+  {key:'orders_manage',label:'Gérer les commandes',desc:'Changer les statuts, livrer ou annuler.'},
+  {key:'catalog_manage',label:'Gérer le catalogue',desc:'Ajouter et modifier les produits.'},
+  {key:'packs_manage',label:'Gérer les packs',desc:'Créer les packs et choisir le pack du mois.'},
+  {key:'announcements_manage',label:'Gérer les annonces',desc:'Publier et supprimer les nouveautés.'},
+  {key:'promotions_manage',label:'Gérer les promotions',desc:'Créer ou désactiver des offres.'},
+  {key:'recruitment_manage',label:'Gérer le recrutement',desc:'Choisir les postes qui recrutent.'},
+  {key:'contacts_manage',label:'Gérer les contacts',desc:'Modifier les contacts généraux du LTD.'},
+  {key:'team_manage',label:'Voir l’équipe',desc:'Consulter les comptes employés.'},
+  {key:'customers_manage',label:'Gérer les clients',desc:'Consulter les clients et ajuster la fidélité.'},
+  {key:'partnerships_manage',label:'Gérer les partenariats',desc:'Lire et traiter les demandes partenaires.'},
+  {key:'settings_manage',label:'Gérer les paramètres',desc:'Horaires, livraison, adresse et réglages du site.'},
+  {key:'stats_view',label:'Voir les statistiques',desc:'Afficher le chiffre d’affaires et les statistiques.'}
+];
+const MANAGEMENT_PERMS = new Set(['catalog_manage','packs_manage','announcements_manage','promotions_manage','recruitment_manage','contacts_manage','team_manage','customers_manage','partnerships_manage','settings_manage','stats_view']);
+let myPermissions = new Set();
+const detailedRole = () => demo.profile?.staff_role || null;
+const isStaff = () => Boolean(detailedRole()) || ['employee','manager','admin'].includes(demo.profile?.role);
+const isDirection = () => ['patron','copatron'].includes(detailedRole()) || ['manager','admin'].includes(demo.profile?.role);
+const can = permission => isDirection() || myPermissions.has(permission);
+const canManageAnything = () => isDirection() || [...MANAGEMENT_PERMS].some(p=>myPermissions.has(p));
 const iconRefresh = () => window.lucide && lucide.createIcons();
 
 function storageGet(key, fallback){ try{return JSON.parse(localStorage.getItem(key)) ?? fallback}catch{return fallback} }
@@ -81,6 +109,7 @@ function seedDemo(){
   demo.contacts = storageGet(LS.contacts, defaults.contacts);
   demo.promotions = storageGet(LS.promotions, defaults.promotions);
   demo.jobs = storageGet(LS.jobs, defaults.jobs);
+  demo.packItems = storageGet(LS.packItems, []);
   settings = {...defaults.settings, ...storageGet(LS.settings, {})};
   demo.profile = storageGet(LS.profile, null);
   const queryRole = new URLSearchParams(location.search).get('demoRole');
@@ -97,6 +126,32 @@ async function getCurrentProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',user.id).single();
   if(error){console.error(error);return null}
   demo.user=user; demo.profile=data; return data;
+}
+async function loadMyPermissions(){
+  myPermissions=new Set();
+  if(!demo.profile || isDirection())return myPermissions;
+  if(hasSupabase){
+    const {data,error}=await sb.rpc('get_my_permissions');
+    if(!error && Array.isArray(data)) data.forEach(x=>myPermissions.add(x));
+  }else{
+    const defaultsByRole={
+      vendeur_novice:['orders_view','orders_claim'],vendeur_intermediaire:['orders_view','orders_claim','orders_manage'],vendeur_experimente:['orders_view','orders_claim','orders_manage'],
+      pompiste_novice:[],pompiste_intermediaire:[],pompiste_experimente:[],livreur:['orders_view','orders_claim','orders_manage'],
+      chef_equipe:['orders_view','orders_claim','orders_manage','stats_view'],responsable_pompiste:['orders_view','team_manage'],responsable_vente:['orders_view','orders_claim','orders_manage','catalog_manage','packs_manage','announcements_manage','recruitment_manage','stats_view']
+    };
+    (defaultsByRole[detailedRole()]||[]).forEach(x=>myPermissions.add(x));
+  }
+  demo.permissions=[...myPermissions];
+  return myPermissions;
+}
+async function getPublicStaffContacts(){
+  if(!hasSupabase){
+    if(!demo.profile?.staff_role || demo.profile.show_phone===false)return [];
+    return [{id:demo.profile.id,name:demo.profile.display_name,phone:demo.profile.phone,label:STAFF_ROLES[demo.profile.staff_role]||'Employé',avatar_url:demo.profile.avatar_url||'',bio:demo.profile.profile_bio||''}];
+  }
+  const {data,error}=await sb.rpc('get_public_staff_contacts');
+  if(error){console.error(error);return []}
+  return data||[];
 }
 async function getSettings(){
   if(!hasSupabase) return settings;
@@ -126,24 +181,19 @@ async function getPromotions(includeInactive=false){
   if(includeInactive)return list;
   return list.filter(p=>p.active!==false && (!p.starts_at||new Date(p.starts_at)<=now) && (!p.ends_at||new Date(p.ends_at)>=now));
 }
-async function getJobs(){
-  if(!hasSupabase)return demo.jobs.filter(j=>j.active!==false);
-  const {data}=await sb.from('jobs').select('*').eq('active',true).order('title');return data||[];
+async function getJobs(includeInactive=false){
+  if(!hasSupabase)return includeInactive?demo.jobs:demo.jobs.filter(j=>j.active!==false);
+  let q=sb.from('jobs').select('*').order('title');
+  if(!includeInactive) q=q.eq('active',true);
+  const {data,error}=await q;if(error){console.error(error);return []}return data||[];
 }
 
 function nav(name){
-  $$('.view').forEach(v=>v.classList.remove('active')); $(`#${name}View`)?.classList.add('active');
+  if(name==='staff'&&!isStaff())return showEmployeeAccess('login');
+  if(name==='admin'&&!canManageAnything())return toast('Votre rôle n’a pas accès à l’administration.');
+  $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome();
-  if(name==='shop')renderShop();
-  if(name==='packs')renderPacks();
-  if(name==='orders')renderOrders();
-  if(name==='news')renderNews();
-  if(name==='recruitment')renderRecruitment();
-  if(name==='contact')renderContact();
-  if(name==='staff')renderStaff(staffFilter);
-  if(name==='admin')renderAdmin();
-  window.scrollTo({top:0,behavior:'smooth'});
+  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='staff')renderStaff(staffFilter);if(name==='admin')renderAdmin();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
@@ -168,11 +218,14 @@ async function renderHome(){
   const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
   demo.products=products;
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
-  const month=products.filter(p=>p.popular && p.available!==false).slice(0,4);
-  const monthFallback=month.length?month:products.filter(p=>p.available!==false).slice(0,4);
+  const month=products.filter(p=>p.popular && p.available!==false && !p.is_pack).slice(0,4);
+  const monthFallback=month.length?month:products.filter(p=>p.available!==false && !p.is_pack).slice(0,4);
   $('#homeMonthProducts').innerHTML=monthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les produits du mois seront bientôt annoncés.</div>';
-  const arrivals=products.filter(p=>p.is_new && p.available!==false).slice(0,4);
+  const arrivals=products.filter(p=>p.is_new && p.available!==false && !p.is_pack).slice(0,4);
   $('#homeNewProducts').innerHTML=arrivals.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les nouvelles arrivées seront bientôt disponibles.</div>';
+  const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
+  if($('#packMonthKicker')) $('#packMonthKicker').textContent=packMonth?'PACK DU MOIS':'PACKS & OFFRES';
+  if($('#packMonthDesc')) $('#packMonthDesc').textContent=packMonth?`${packMonth.name} — ${packMonth.description||'Découvrez la sélection du mois.'}`:'Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.';
   if($('#contactsList')) $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
   updateCartCount();
   iconRefresh();
@@ -186,6 +239,11 @@ window.openCatalogProduct=id=>{
   setTimeout(()=>{ const search=$('#productSearch'); if(search){search.value=product?.name||'';renderShop();} },40);
 };
 function contactHTML(c){
+  const avatar=c.avatar_url?`<div class="contact-avatar"><img src="${esc(c.avatar_url)}" alt=""></div>`:`<div class="contact-avatar">${esc((c.name||'?').slice(0,1).toUpperCase())}</div>`;
+  if(c.avatar_url || c.staff_role || c.bio){
+    const phone=validPhone(c.phone)?`<a href="tel:${esc(c.phone)}" data-phone="${esc(c.phone)}">${esc(c.phone)}</a>`:'<span>Numéro privé</span>';
+    return `<article class="contact-card with-avatar">${avatar}<div class="contact-copy"><span>${esc(c.label||STAFF_ROLES[c.staff_role]||'Équipe')}</span><strong>${esc(c.name)}</strong>${c.bio?`<small class="subtle">${esc(c.bio)}</small>`:''}${phone}</div></article>`;
+  }
   return `<article class="contact-card"><span>${esc(c.label)}</span><strong>${esc(c.name)}</strong><a href="${validPhone(c.phone)?`tel:${esc(c.phone)}`:'#'}" data-phone="${esc(c.phone)}">${esc(c.phone)}</a></article>`;
 }
 function announcementHTML(a){
@@ -198,22 +256,34 @@ async function renderNews(){
   iconRefresh();
 }
 async function renderRecruitment(){
-  await getSettings(); applySettingsToUI(); demo.jobs=await getJobs();
-  $('#jobsList').innerHTML=demo.jobs.map(j=>`<div class="job-card"><strong>${esc(j.title)}</strong><span>${esc(j.description)}</span><button class="text-btn" style="padding:8px 0 0" onclick="showApplication('${j.id}')">Postuler</button></div>`).join('')||'<div class="empty">Aucun poste ouvert actuellement.</div>';
+  await getSettings(); applySettingsToUI(); demo.jobs=await getJobs(true);
+  $('#jobsList').innerHTML=demo.jobs.map(j=>`<div class="job-card"><strong>${esc(j.title)}</strong><span>${esc(j.description)}</span><b class="recruit-status ${j.active!==false?'open':'closed'}">${j.active!==false?'RECRUTE':'NE RECRUTE PAS'}</b></div>`).join('')||'<div class="empty">Les postes seront bientôt renseignés.</div>';
   iconRefresh();
 }
 async function renderContact(){
-  await getSettings(); applySettingsToUI(); const contacts=await getContacts();
-  $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
+  await getSettings(); applySettingsToUI(); const [contacts,staffContacts]=await Promise.all([getContacts(),getPublicStaffContacts()]);
+  const staffRoles=new Set(staffContacts.map(c=>c.staff_role));
+  const manual=contacts.filter(c=>!(staffRoles.has('patron')&&String(c.label||'').toLowerCase()==='patron') && !(staffRoles.has('copatron')&&String(c.label||'').toLowerCase().startsWith('co-patron')));
+  $('#contactsList').innerHTML=[...staffContacts,...manual].map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
   iconRefresh();
 }
 async function renderPacks(){
   await getSettings(); const all=await getProducts(); demo.products=all;
-  const packs=all.filter(p=>String(p.category||'').toLowerCase().includes('pack') || String(p.name||'').toLowerCase().startsWith('pack'));
+  const packs=all.filter(p=>p.is_pack || String(p.category||'').toLowerCase().includes('pack') || String(p.name||'').toLowerCase().startsWith('pack')).sort((a,b)=>Number(Boolean(b.is_pack_of_month))-Number(Boolean(a.is_pack_of_month)));
   $('#packsGrid').innerHTML=packs.map(productHTML).join('')||'<div class="empty" style="grid-column:1/-1">Aucun pack n’est disponible pour le moment.</div>';
   updateCartCount(); iconRefresh();
 }
 
+async function getPackItems(packId){
+  if(!hasSupabase)return demo.packItems.filter(x=>String(x.pack_id)===String(packId)).map(x=>({...x,products:demo.products.find(p=>String(p.id)===String(x.product_id))||null}));
+  const {data,error}=await sb.from('pack_items').select('product_id,quantity,products(name,emoji,price)').eq('pack_id',packId).order('created_at');
+  if(error){console.error(error);return []}return data||[];
+}
+window.showPackInfo=async id=>{
+  const pack=(demo.products.length?demo.products:await getProducts()).find(p=>String(p.id)===String(id));if(!pack)return;
+  const items=await getPackItems(id);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">${pack.is_pack_of_month?'PACK DU MOIS':'PACK LTD'}</span><h3>${esc(pack.name)}</h3><p class="page-intro">${esc(pack.description||'')}</p><div class="pack-content-list">${items.map(i=>`<div class="pack-content-row"><span>${esc(i.products?.emoji||'🛒')} ${esc(i.products?.name||'Article')}</span><strong>x${num(i.quantity)}</strong></div>`).join('')||'<div class="empty">Le contenu de ce pack sera bientôt détaillé.</div>'}</div><div class="total-line grand"><span>Prix du pack</span><strong>${money(pack.price)}</strong></div><div class="modal-actions"><button class="btn primary" onclick="closeModal();addToCart('${pack.id}')">Ajouter au panier</button></div>`);
+};
 function validPhone(phone){return phone && phone!=='À renseigner' && /\d/.test(phone)}
 $('#callBusiness')?.addEventListener('click',()=>{if(validPhone(settings.phone))location.href=`tel:${settings.phone}`;else toast('Le numéro du LTD sera bientôt disponible.')});
 $('#businessStatusButton').addEventListener('click',()=>toast(settings.business_open?'Le LTD accepte actuellement les commandes.':'Les commandes sont momentanément fermées.'));
@@ -234,14 +304,15 @@ async function renderShop(){
 }
 function productHTML(p){
   const available=p.available!==false && (p.stock===null||p.stock===undefined||num(p.stock)>0);
-  const badge=p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':'');
-  return `<article class="product-card ${available?'':'unavailable'}"><div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4><p>${esc(p.description||'')}</p><div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div><div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
+  const badge=p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':''));
+  return `<article class="product-card ${p.is_pack?'pack-card':''} ${available?'':'unavailable'}">${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4><p>${esc(p.description||'')}</p><div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
 }
 $('#productSearch').addEventListener('input',renderShop);
 document.addEventListener('click',e=>{
   const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShop();return}
   const m=e.target.closest('[data-qminus]');if(m){adjustCardQty(m.dataset.qminus,-1);return}
   const p=e.target.closest('[data-qplus]');if(p){adjustCardQty(p.dataset.qplus,1);return}
+  const info=e.target.closest('[data-packinfo]');if(info){showPackInfo(info.dataset.packinfo);return}
   const a=e.target.closest('[data-addqty]');if(a){addToCart(a.dataset.addqty);return}
 });
 function adjustCardQty(id,d){const input=byId(`qty-${id}`);if(!input)return;input.value=Math.max(1,Math.min(999,num(input.value)+d))}
@@ -379,13 +450,20 @@ window.reorderOrder=async id=>{
 function staffActions(o){
   const mine=String(o.assigned_to||'')===String(demo.profile?.id||'');
   if(['delivered','cancelled'].includes(o.status))return '';
-  if(!o.assigned_to)return `<div class="order-actions"><button class="primary-action" onclick="claimOrder('${o.id}')">Prendre la commande</button><button onclick="cancelOrderPrompt('${o.id}')">Refuser</button></div>`;
-  if(!mine&&!isDirection())return `<div class="order-actions"><button disabled>Déjà prise par ${esc(o.assigned_name||'un collègue')}</button></div>`;
+  if(!o.assigned_to){
+    const claim=can('orders_claim')?`<button class="primary-action" onclick="claimOrder('${o.id}')">Prendre la commande</button>`:'';
+    const cancel=can('orders_manage')?`<button onclick="cancelOrderPrompt('${o.id}')">Refuser</button>`:'';
+    return `<div class="order-actions">${claim}${cancel}<button onclick="showStaffOrder('${o.id}')">Détails</button></div>`;
+  }
+  if(!mine&&!isDirection())return `<div class="order-actions"><button disabled>Déjà prise par ${esc(o.assigned_name||'un collègue')}</button><button onclick="showStaffOrder('${o.id}')">Détails</button></div>`;
   const next={pending:'accepted',accepted:'preparing',preparing:'ready',ready:o.fulfillment==='pickup'?'delivered':'out_for_delivery',out_for_delivery:'delivered'}[o.status];
-  return `<div class="order-actions">${next?`<button class="primary-action" onclick="setOrderStatus('${o.id}','${next}')">${next==='accepted'?'Confirmer':next==='preparing'?'Commencer la préparation':next==='ready'?'Marquer prête':next==='out_for_delivery'?'Départ livraison':'Terminer la commande'}</button>`:''}<button onclick="showStaffOrder('${o.id}')">Détails</button><button onclick="cancelOrderPrompt('${o.id}')">Annuler</button></div>`;
+  return `<div class="order-actions">${next&&can('orders_manage')?`<button class="primary-action" onclick="setOrderStatus('${o.id}','${next}')">${next==='accepted'?'Confirmer':next==='preparing'?'Commencer la préparation':next==='ready'?'Marquer prête':next==='out_for_delivery'?'Départ livraison':'Terminer la commande'}</button>`:''}<button onclick="showStaffOrder('${o.id}')">Détails</button>${can('orders_manage')?`<button onclick="cancelOrderPrompt('${o.id}')">Annuler</button>`:''}</div>`;
 }
 async function renderStaff(filter='active'){
   staffFilter=filter;if(!isStaff()){ $('#staffOrders').innerHTML='<div class="empty">Accès réservé à l’équipe.</div>';return }
+  const avatar=demo.profile?.avatar_url?`<div class="staff-avatar"><img src="${esc(demo.profile.avatar_url)}" alt=""></div>`:`<div class="staff-avatar">${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}</div>`;
+  $('#staffProfileCard').innerHTML=`${avatar}<div class="staff-profile-copy"><strong>${esc(demo.profile?.display_name||'Employé')}</strong><span>${esc(roleLabel(detailedRole()||demo.profile?.role||'employee'))}</span><span>${demo.profile?.show_phone?'Numéro affiché dans les contacts':'Numéro privé'}</span></div><button onclick="editProfile()" title="Modifier mon profil"><i data-lucide="user-pen"></i></button>`;
+  if(!can('orders_view')){$('#staffKpis').innerHTML='';$('#staffOrders').innerHTML='<div class="empty">Votre rôle n’a pas accès aux commandes. Vous pouvez quand même gérer votre fiche de profil depuis cet espace.</div>';iconRefresh();return}
   let orders=[];
   if(hasSupabase){let q=sb.from('orders').select('*').order('created_at',{ascending:false});if(filter==='active')q=q.not('status','in','(delivered,cancelled)');if(filter==='mine')q=q.eq('assigned_to',demo.profile.id).not('status','in','(delivered,cancelled)');const{data}=await q;orders=data||[]}
   else orders=demo.orders.filter(o=>filter==='all'||(filter==='mine'?String(o.assigned_to)===String(demo.profile.id)&&!['delivered','cancelled'].includes(o.status):!['delivered','cancelled'].includes(o.status)));
@@ -427,16 +505,61 @@ window.submitAuth=async mode=>{
     demo.user={id:'demo-user',email};demo.profile={id:'demo-user',display_name:($('#authName')?.value||email.split('@')[0]),phone:($('#authPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};storageSet(LS.profile,demo.profile);closeModal();await initAuth();toast('Compte créé.');
   }
 };
+function showEmployeeAccess(mode='login'){
+  if(isStaff()){nav('staff');return}
+  const signing=mode==='signup';
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">ESPACE EMPLOYÉS</span><h3>${signing?'Créer mon compte équipe':'Connexion équipe'}</h3>${signing?`<div class="form-grid"><div class="form-group"><label>Prénom & nom</label><input id="staffAuthName" placeholder="Prénom Nom"></div><div class="form-group"><label>Téléphone</label><input id="staffAuthPhone" placeholder="Numéro"></div></div>`:''}<div class="form-group"><label>Email</label><input id="staffAuthEmail" type="email" placeholder="vous@exemple.com"></div><div class="form-group"><label>Mot de passe</label><input id="staffAuthPass" type="password" placeholder="••••••••"></div><div class="form-group"><label>Code d’accès ${signing?'':'(si votre compte n’est pas encore activé)'}</label><input id="staffAccessCode" autocomplete="one-time-code" placeholder="LTD-XXXX-XXXX"></div><div class="modal-actions"><button class="btn ghost" onclick="showEmployeeAccess('${signing?'login':'signup'}')">${signing?'J’ai déjà un compte':'Créer mon compte équipe'}</button><button class="btn primary" onclick="submitEmployeeAuth('${mode}')">${signing?'Créer & activer':'Se connecter'}</button></div>`);
+}
+window.showEmployeeAccess=showEmployeeAccess;
+async function redeemStaffCode(code){
+  code=String(code||'').trim();if(!code)return null;
+  if(hasSupabase){const {data,error}=await sb.rpc('redeem_staff_access_code',{p_code:code});if(error)throw error;return data}
+  const r=code.toUpperCase().startsWith('PATRON-')?'patron':code.toUpperCase().startsWith('COPATRON-')?'copatron':'livreur';
+  demo.profile.staff_role=r;demo.profile.role=['patron','copatron'].includes(r)?'admin':'employee';storageSet(LS.profile,demo.profile);return r;
+}
+window.submitEmployeeAuth=async mode=>{
+  const email=($('#staffAuthEmail')?.value||'').trim(),pass=$('#staffAuthPass')?.value||'',code=($('#staffAccessCode')?.value||'').trim();
+  if(!email||!pass)return toast('Email et mot de passe obligatoires.');if(mode==='signup'&&!code)return toast('Le code d’accès est obligatoire.');
+  try{
+    if(hasSupabase){
+      if(mode==='signup'){
+        const name=($('#staffAuthName')?.value||'').trim()||'Employé',phone=($('#staffAuthPhone')?.value||'').trim();
+        const {data,error}=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name,phone}}});if(error)throw error;
+        if(data.session){await redeemStaffCode(code)}else{localStorage.setItem('ltd_pending_staff_code',code);toast('Compte créé. Confirmez l’email puis reconnectez-vous pour activer le code.');closeModal();return}
+      }else{
+        const {error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error;
+        const pending=code||localStorage.getItem('ltd_pending_staff_code')||'';if(pending){await redeemStaffCode(pending);localStorage.removeItem('ltd_pending_staff_code')}
+      }
+    }else{
+      demo.user={id:'demo-staff',email};demo.profile=demo.profile||{id:'demo-staff',display_name:($('#staffAuthName')?.value||email.split('@')[0]),phone:($('#staffAuthPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};if(code)await redeemStaffCode(code);
+    }
+    closeModal();await initAuth();isStaff()?nav('staff'):toast('Compte connecté, mais aucun accès employé n’est activé.');
+  }catch(err){toast(err.message||'Connexion impossible.');}
+};
+$('#employeeAccessBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
+$('#employeeFooterBtn')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
+$('#homeEmployeeAccess')?.addEventListener('click',()=>isStaff()?nav('staff'):showEmployeeAccess('login'));
 $('#accountBtn')?.addEventListener('click',showAccount);
-function roleLabel(r){return ({customer:'Client',employee:'Employé',manager:'Responsable',admin:'Direction'})[r]||r}
+function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Employé',manager:'Responsable',admin:'Direction'})[r]||r}
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong><span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="closeModal();nav('staff')"><i data-lucide="clipboard-check"></i> Espace équipe</button><button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${isDirection()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Direction</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong><span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="closeModal();nav('staff')"><i data-lucide="clipboard-check"></i> Espace équipe</button><button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
 }
-window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3><div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div><div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
+window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
+async function uploadAvatar(file){
+  if(!file)return demo.profile?.avatar_url||'';
+  if(!hasSupabase){return await new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(file)})}
+  const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').toLowerCase();const path=`${demo.profile.id}/avatar-${Date.now()}.${ext}`;
+  const {error}=await sb.storage.from('staff-avatars').upload(path,file,{upsert:true,contentType:file.type||undefined});if(error)throw error;
+  return sb.storage.from('staff-avatars').getPublicUrl(path).data.publicUrl;
+}
 window.saveProfile=async()=>{
-  const x={display_name:$('#profileName').value.trim(),phone:$('#profilePhone').value.trim(),favorite_address:$('#profileAddress').value.trim()};
-  if(hasSupabase){const{error}=await sb.from('profiles').update(x).eq('id',demo.profile.id);if(error)return toast(error.message);await getCurrentProfile()}else{Object.assign(demo.profile,x);storageSet(LS.profile,demo.profile)}closeModal();toast('Informations enregistrées.');
+  try{
+    const file=$('#profileAvatar')?.files?.[0]||null;const avatar=isStaff()?await uploadAvatar(file):(demo.profile?.avatar_url||'');
+    const x={display_name:$('#profileName').value.trim(),phone:$('#profilePhone').value.trim(),favorite_address:$('#profileAddress').value.trim()};
+    if(isStaff()){x.profile_bio=($('#profileBio')?.value||'').trim();x.show_phone=Boolean($('#profileShowPhone')?.checked);x.avatar_url=avatar}
+    if(hasSupabase){const{error}=await sb.from('profiles').update(x).eq('id',demo.profile.id);if(error)throw error;await getCurrentProfile()}else{Object.assign(demo.profile,x);storageSet(LS.profile,demo.profile)}closeModal();renderContact();toast('Informations enregistrées.');
+  }catch(err){toast(err.message||'Impossible d’enregistrer le profil.');}
 };
 window.showLoyaltyHistory=async()=>{
   let events=[];if(hasSupabase){const{data}=await sb.from('loyalty_events').select('*').eq('user_id',demo.profile.id).order('created_at',{ascending:false});events=data||[]}
@@ -476,34 +599,61 @@ $('#partnerForm')?.addEventListener('submit',async e=>{
 });
 
 async function renderAdmin(){
-  if(!isDirection()){ $('#adminView').innerHTML='<div class="empty">Accès réservé à la direction.</div>';return }
+  if(!canManageAnything()){ $('#adminStats').innerHTML='';$('#adminActivity').innerHTML='<div class="empty">Votre rôle ne possède aucun accès d’administration.</div>';return }
+  $$('#adminView [data-perm]').forEach(card=>card.classList.toggle('hidden-by-permission',!can(card.dataset.perm)));
+  $$('#adminView .direction-only').forEach(card=>card.classList.toggle('hidden-by-permission',!isDirection()));
   let orders=[];
-  if(hasSupabase){const{data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);orders=data||[]}else orders=demo.orders;
+  if(can('stats_view')||isDirection()){
+    if(hasSupabase){const{data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);orders=data||[]}else orders=demo.orders;
+  }
   const delivered=orders.filter(o=>o.status==='delivered'),active=orders.filter(o=>!['delivered','cancelled'].includes(o.status));
   const revenue=delivered.reduce((a,o)=>a+num(o.total),0),fees=delivered.reduce((a,o)=>a+num(o.delivery_fee),0),avg=delivered.length?revenue/delivered.length:0;
-  const customers=new Map(),products=new Map();
-  for(const o of delivered){
-    const key=o.customer_name||'Client';customers.set(key,(customers.get(key)||0)+num(o.total));
-    for(const i of (o.order_items||o.items||[])){const name=i.product_name||i.name||'Article';products.set(name,(products.get(name)||0)+num(i.quantity||i.qty));}
-  }
-  const topCustomer=[...customers.entries()].sort((a,b)=>b[1]-a[1])[0];
-  const topProduct=[...products.entries()].sort((a,b)=>b[1]-a[1])[0];
-  $('#adminStats').innerHTML=`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`;
-  const insights=`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>`;
-  $('#adminActivity').innerHTML=insights+(orders.slice(0,6).map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune activité.</div>');iconRefresh();
+  const customers=new Map(),products=new Map();for(const o of delivered){const key=o.customer_name||'Client';customers.set(key,(customers.get(key)||0)+num(o.total));for(const i of (o.order_items||o.items||[])){const name=i.product_name||i.name||'Article';products.set(name,(products.get(name)||0)+num(i.quantity||i.qty));}}
+  const topCustomer=[...customers.entries()].sort((a,b)=>b[1]-a[1])[0],topProduct=[...products.entries()].sort((a,b)=>b[1]-a[1])[0];
+  $('#adminStats').innerHTML=(can('stats_view')||isDirection())?`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`:'';
+  $('#adminActivity').innerHTML=(can('stats_view')||isDirection())?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>${orders.slice(0,6).map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune activité.</div>'}`:'<div class="empty">Les outils autorisés pour votre rôle sont disponibles au-dessus.</div>';
+  iconRefresh();
 }
 $('#refreshAdmin').addEventListener('click',renderAdmin);
 document.addEventListener('click',e=>{
   const a=e.target.closest('[data-admin]');if(!a)return;
-  ({announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,promotion:adminPromotion,contacts:adminContacts,settings:adminSettings,team:adminTeam,customers:adminCustomers,partnerships:adminPartnerships})[a.dataset.admin]?.();
+  const perm=a.dataset.perm;if(perm&&!can(perm))return toast('Votre rôle n’a pas cet accès.');
+  ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,team:adminTeam,permissions:adminPermissions,customers:adminCustomers,partnerships:adminPartnerships})[a.dataset.admin]?.();
 });
-function adminAnnouncement(){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Publier une annonce</h3><div class="form-group"><label>Titre</label><input id="annTitle"></div><div class="form-group"><label>Texte</label><textarea id="annBody"></textarea></div><div class="form-group"><label>Type</label><select id="annType"><option value="news">Actualité</option><option value="recruitment">Recrutement</option><option value="promotion">Promotion</option><option value="alert">Information importante</option></select></div><label class="checkbox-row"><input type="checkbox" id="annFeatured"> Mettre à la une / Nouveau</label><div class="modal-actions"><button class="btn primary" onclick="saveAnnouncement()">Publier</button></div>`)}
-window.saveAnnouncement=async()=>{const x={title:$('#annTitle').value.trim(),body:$('#annBody').value.trim(),type:$('#annType').value,featured:$('#annFeatured').checked,active:true};if(!x.title||!x.body)return toast('Titre et texte obligatoires.');if(hasSupabase){const{error}=await sb.from('announcements').insert(x);if(error)return toast(error.message)}else{demo.announcements.unshift({...x,id:uid('ann'),created_at:new Date().toISOString()});storageSet(LS.announcements,demo.announcements)}closeModal();renderHome();toast('Annonce publiée.')};
+async function adminAnnouncements(){
+  const list=await getAnnouncements(true);demo.announcements=list;
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Annonces</h3><div class="stack">${list.map(a=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="megaphone"></i></div><div><strong>${esc(a.title)}</strong><p>${esc(a.body)} • ${a.active!==false?'Visible':'Masquée'}</p></div><div class="catalog-actions"><button onclick="deleteAnnouncement('${a.id}')" title="Supprimer"><i data-lucide="trash-2"></i></button></div></div>`).join('')||'<div class="empty">Aucune annonce.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="adminAnnouncement()"><i data-lucide="plus"></i> Nouvelle annonce</button>`);iconRefresh();
+}
+function adminAnnouncement(){openModal(`<button class="icon-btn close" onclick="adminAnnouncements()">×</button><h3>Publier une annonce</h3><div class="form-group"><label>Titre</label><input id="annTitle" placeholder="Titre de l’annonce"></div><div class="form-group"><label>Sous-titre / texte</label><textarea id="annBody" placeholder="Texte affiché sous le titre"></textarea></div><div class="form-group"><label>Type</label><select id="annType"><option value="news">Actualité</option><option value="recruitment">Recrutement</option><option value="promotion">Promotion</option><option value="alert">Information importante</option></select></div><label class="checkbox-row"><input type="checkbox" id="annFeatured"> Mettre à la une / Nouveau</label><div class="modal-actions"><button class="btn primary" onclick="saveAnnouncement()">Publier</button></div>`)}
+window.saveAnnouncement=async()=>{const x={title:$('#annTitle').value.trim(),body:$('#annBody').value.trim(),type:$('#annType').value,featured:$('#annFeatured').checked,active:true};if(!x.title||!x.body)return toast('Titre et sous-titre obligatoires.');if(hasSupabase){const{error}=await sb.from('announcements').insert(x);if(error)return toast(error.message)}else{demo.announcements.unshift({...x,id:uid('ann'),created_at:new Date().toISOString()});storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce publiée.');adminAnnouncements();};
+window.deleteAnnouncement=async id=>{if(!confirm('Supprimer cette annonce ?'))return;if(hasSupabase){const{error}=await sb.from('announcements').delete().eq('id',id);if(error)return toast(error.message)}else{demo.announcements=demo.announcements.filter(a=>String(a.id)!==String(id));storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce supprimée.');adminAnnouncements();};
 function adminProduct(product=null){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${product?'Modifier':'Ajouter'} un produit</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="prodName" value="${esc(product?.name||'')}"></div><div class="form-group"><label>Prix</label><input id="prodPrice" type="number" min="0" step="0.01" value="${num(product?.price)}"></div></div><div class="form-group"><label>Description</label><input id="prodDesc" value="${esc(product?.description||'')}"></div><div class="form-grid"><div class="form-group"><label>Catégorie</label><input id="prodCat" value="${esc(product?.category||'Divers')}"></div><div class="form-group"><label>Emoji / icône</label><input id="prodEmoji" value="${esc(product?.emoji||'🛒')}"></div></div><div class="form-group"><label>Stock (laisser vide = illimité)</label><input id="prodStock" type="number" min="0" value="${product?.stock??''}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="prodPopular" ${product?.popular?'checked':''}> Populaire</label><label class="checkbox-row"><input type="checkbox" id="prodNew" ${product?.is_new?'checked':''}> Nouveauté</label></div><label class="checkbox-row"><input type="checkbox" id="prodAvailable" ${product?.available!==false?'checked':''}> Disponible à la vente</label><div class="modal-actions"><button class="btn primary" onclick="saveProduct('${product?.id||''}')">Enregistrer</button></div>`)}
 window.saveProduct=async id=>{const rawStock=$('#prodStock').value.trim();const x={name:$('#prodName').value.trim(),description:$('#prodDesc').value.trim(),price:num($('#prodPrice').value),category:$('#prodCat').value.trim()||'Divers',emoji:$('#prodEmoji').value.trim()||'🛒',stock:rawStock===''?null:Math.max(0,Math.floor(num(rawStock))),popular:$('#prodPopular').checked,is_new:$('#prodNew').checked,available:$('#prodAvailable').checked,active:true};if(!x.name)return toast('Nom obligatoire.');if(hasSupabase){const q=id?sb.from('products').update(x).eq('id',id):sb.from('products').insert(x);const{error}=await q;if(error)return toast(error.message)}else{if(id){const i=demo.products.findIndex(p=>String(p.id)===String(id));if(i>=0)demo.products[i]={...demo.products[i],...x}}else demo.products.push({...x,id:uid('p')});storageSet(LS.products,demo.products)}closeModal();renderShop();toast('Produit enregistré.')};
 async function adminProducts(){const list=await getProducts(true);demo.products=list;openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Catalogue</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'🛒')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)} • ${esc(p.category)} • ${p.available!==false?'Disponible':'Indisponible'}${p.stock!==null&&p.stock!==undefined?` • Stock ${p.stock}`:''}</p></div><div class="catalog-actions"><button onclick="editAdminProduct('${p.id}')"><i data-lucide="pencil"></i></button><button onclick="toggleProduct('${p.id}',${p.available!==false})"><i data-lucide="${p.available!==false?'eye-off':'eye'}"></i></button></div></div>`).join('')}</div>`)}
 window.editAdminProduct=id=>{const p=demo.products.find(x=>String(x.id)===String(id));if(p)adminProduct(p)};
 window.toggleProduct=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('products').update({available:!current}).eq('id',id);if(error)return toast(error.message)}else{const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.available=!current;storageSet(LS.products,demo.products)}adminProducts();};
+async function adminPacks(){
+  const list=(await getProducts(true)).filter(p=>p.is_pack);demo.products=await getProducts(true);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Packs</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'📦')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)}${p.is_pack_of_month?' • PACK DU MOIS':''}</p></div><div class="catalog-actions"><button onclick="editAdminPack('${p.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')||'<div class="empty">Aucun pack.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="adminPack()"><i data-lucide="plus"></i> Nouveau pack</button>`);iconRefresh();
+}
+window.editAdminPack=async id=>{const all=await getProducts(true);demo.products=all;const p=all.find(x=>String(x.id)===String(id));if(p)adminPack(p)};
+async function adminPack(pack=null){
+  const all=await getProducts(true);demo.products=all;const base=all.filter(p=>!p.is_pack&&p.active!==false);let items=[];if(pack)items=await getPackItems(pack.id);const qtyMap=new Map(items.map(i=>[String(i.product_id),num(i.quantity)]));
+  openModal(`<button class="icon-btn close" onclick="adminPacks()">×</button><h3>${pack?'Modifier':'Créer'} un pack</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="packName" value="${esc(pack?.name||'')}"></div><div class="form-group"><label>Prix du pack</label><input id="packPrice" type="number" min="0" step="0.01" value="${num(pack?.price)}"></div></div><div class="form-group"><label>Description</label><input id="packDesc" value="${esc(pack?.description||'')}"></div><div class="form-group"><label>Emoji / icône</label><input id="packEmoji" value="${esc(pack?.emoji||'📦')}"></div><label class="checkbox-row"><input type="checkbox" id="packMonth" ${pack?.is_pack_of_month?'checked':''}> Définir comme Pack du mois</label><label class="checkbox-row"><input type="checkbox" id="packAvailable" ${pack?.available!==false?'checked':''}> Disponible à la vente</label><div class="divider"></div><span class="eyebrow">CONTENU DU PACK</span><div class="permission-grid">${base.map(p=>{const q=qtyMap.get(String(p.id))||0;return `<div class="permission-row"><div><strong>${esc(p.emoji||'🛒')} ${esc(p.name)}</strong><span>${money(p.price)}</span></div><div style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="pack-item-check" data-product="${p.id}" ${q>0?'checked':''}><input class="form-control pack-item-qty" data-product="${p.id}" type="number" min="1" max="99" value="${q||1}" style="width:62px;padding:8px"></div></div>`}).join('')||'<div class="empty">Ajoutez d’abord des produits au catalogue.</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="savePack('${pack?.id||''}')">Enregistrer le pack</button></div>`);iconRefresh();
+}
+window.savePack=async id=>{const x={name:$('#packName').value.trim(),description:$('#packDesc').value.trim(),price:num($('#packPrice').value),category:'Packs',emoji:$('#packEmoji').value.trim()||'📦',is_pack:true,is_pack_of_month:$('#packMonth').checked,available:$('#packAvailable').checked,active:true,stock:null};if(!x.name)return toast('Nom du pack obligatoire.');const items=$$('.pack-item-check:checked').map(c=>({product_id:c.dataset.product,quantity:Math.max(1,Math.floor(num($(`.pack-item-qty[data-product="${c.dataset.product}"]`)?.value)||1))}));if(!items.length)return toast('Ajoutez au moins un article au pack.');let packId=id;
+  if(hasSupabase){if(x.is_pack_of_month)await sb.from('products').update({is_pack_of_month:false}).eq('is_pack',true);if(id){const{error}=await sb.from('products').update(x).eq('id',id);if(error)return toast(error.message)}else{const{data,error}=await sb.from('products').insert(x).select('id').single();if(error)return toast(error.message);packId=data.id}await sb.from('pack_items').delete().eq('pack_id',packId);const{error}=await sb.from('pack_items').insert(items.map(i=>({...i,pack_id:packId})));if(error)return toast(error.message)}else{if(x.is_pack_of_month)demo.products.forEach(p=>p.is_pack_of_month=false);if(id){const i=demo.products.findIndex(p=>String(p.id)===String(id));demo.products[i]={...demo.products[i],...x}}else{packId=uid('pack');demo.products.push({...x,id:packId})}demo.packItems=demo.packItems.filter(i=>String(i.pack_id)!==String(packId)).concat(items.map(i=>({...i,pack_id:packId,id:uid('pi')})));storageSet(LS.products,demo.products);storageSet(LS.packItems,demo.packItems)}toast('Pack enregistré.');renderHome();adminPacks();};
+
+async function adminRecruitment(){const jobs=await getJobs(true);demo.jobs=jobs;openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Recrutement</h3><p class="page-intro">Activez uniquement les postes pour lesquels le LTD recrute actuellement.</p><div class="stack">${jobs.map(j=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="badge-user"></i></div><div><strong>${esc(j.title)}</strong><p>${esc(j.description)}</p></div><div class="catalog-actions"><button onclick="toggleJobRecruitment('${j.id}',${j.active!==false})" title="${j.active!==false?'Fermer':'Ouvrir'} le recrutement"><i data-lucide="${j.active!==false?'toggle-right':'toggle-left'}"></i></button></div></div>`).join('')}</div>`);iconRefresh();}
+window.toggleJobRecruitment=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('jobs').update({active:!current}).eq('id',id);if(error)return toast(error.message)}else{const j=demo.jobs.find(x=>String(x.id)===String(id));if(j)j.active=!current;storageSet(LS.jobs,demo.jobs)}toast(!current?'Recrutement ouvert.':'Recrutement fermé.');adminRecruitment();};
+
+async function adminPermissions(role='vendeur_novice'){
+  if(!isDirection())return toast('Seuls le Patron et le Co-patron peuvent modifier les permissions.');let enabled=[];
+  if(hasSupabase){const{data,error}=await sb.from('role_permissions').select('permission_key,enabled').eq('staff_role',role);if(error)return toast(error.message);enabled=(data||[]).filter(x=>x.enabled).map(x=>x.permission_key)}else enabled=[];
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Permissions des rôles</h3><div class="form-group"><label>Rôle à configurer</label><select id="permissionRole">${Object.entries(STAFF_ROLES).filter(([k])=>!['patron','copatron'].includes(k)).map(([k,v])=>`<option value="${k}" ${k===role?'selected':''}>${esc(v)}</option>`).join('')}</select></div><div class="permission-grid">${PERMISSION_DEFS.map(p=>`<label class="permission-row"><div><strong>${esc(p.label)}</strong><span>${esc(p.desc)}</span></div><input type="checkbox" class="perm-check" value="${p.key}" ${enabled.includes(p.key)?'checked':''}></label>`).join('')}</div><div class="modal-actions"><button class="btn primary" onclick="saveRolePermissions()">Enregistrer</button></div>`);$('#permissionRole').addEventListener('change',e=>adminPermissions(e.target.value));
+}
+window.saveRolePermissions=async()=>{const role=$('#permissionRole').value,perms=$$('.perm-check:checked').map(x=>x.value);if(hasSupabase){const{error}=await sb.rpc('admin_set_role_permissions',{p_staff_role:role,p_permissions:perms});if(error)return toast(error.message)}toast('Permissions enregistrées.');adminPermissions(role);};
+
 async function adminPromotion(){
   const list=await getPromotions(true);demo.promotions=list;
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Promotions</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="badge-percent"></i></div><div><strong>${esc(p.name)}</strong><p>${promoDescription(p)}${p.code?` • Code ${esc(p.code)}`:' • Automatique'} • ${p.active?'Active':'Inactive'}</p></div><div class="catalog-actions"><button onclick="togglePromotion('${p.id}',${p.active!==false})"><i data-lucide="${p.active!==false?'pause':'play'}"></i></button></div></div>`).join('')||'<div class="empty">Aucune promotion créée.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="showPromotionForm()"><i data-lucide="plus"></i> Nouvelle promotion</button>`);iconRefresh();
@@ -517,11 +667,15 @@ window.saveContact=async id=>{const x={label:$('#contactLabel').value.trim(),nam
 function adminSettings(){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Paramètres</h3><label class="checkbox-row"><input type="checkbox" id="setOpen" ${settings.business_open?'checked':''}> Commandes ouvertes</label><div class="form-grid"><div class="form-group"><label>Frais livraison</label><input id="setFee" type="number" min="0" value="${num(settings.delivery_fee)}"></div><div class="form-group"><label>Minimum commande</label><input id="setMin" type="number" min="0" value="${num(settings.min_order)}"></div></div><div class="form-grid"><div class="form-group"><label>Délai min (min)</label><input id="setEtaMin" type="number" min="0" value="${num(settings.delivery_eta_min)}"></div><div class="form-group"><label>Délai max (min)</label><input id="setEtaMax" type="number" min="0" value="${num(settings.delivery_eta_max)}"></div></div><div class="form-grid"><div class="form-group"><label>Points / commande</label><input id="setPoints" type="number" min="0" value="${num(settings.points_per_order)}"></div><div class="form-group"><label>Seuil récompense</label><input id="setReward" type="number" min="1" value="${num(settings.loyalty_reward_points)}"></div></div><div class="form-group"><label>Adresse</label><input id="setAddress" value="${esc(settings.address)}"></div><div class="form-group"><label>Téléphone du LTD</label><input id="setPhone" value="${esc(settings.phone)}"></div><div class="form-group"><label>Horaires / information d’ouverture</label><input id="setHours" value="${esc(settings.hours_text)}"></div><div class="form-group"><label>Jour de recrutement</label><input id="setRecruit" value="${esc(settings.recruitment_day)}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="setDelivery" ${settings.delivery_enabled?'checked':''}> Livraison</label><label class="checkbox-row"><input type="checkbox" id="setPickup" ${settings.pickup_enabled?'checked':''}> Retrait LTD</label></div><div class="modal-actions"><button class="btn primary" onclick="saveSettings()">Enregistrer</button></div>`)}
 window.saveSettings=async()=>{const x={business_open:$('#setOpen').checked,delivery_fee:num($('#setFee').value),min_order:num($('#setMin').value),delivery_eta_min:num($('#setEtaMin').value),delivery_eta_max:num($('#setEtaMax').value),points_per_order:num($('#setPoints').value),loyalty_reward_points:num($('#setReward').value),address:$('#setAddress').value.trim(),phone:$('#setPhone').value.trim(),hours_text:$('#setHours').value.trim(),recruitment_day:$('#setRecruit').value.trim(),delivery_enabled:$('#setDelivery').checked,pickup_enabled:$('#setPickup').checked};if(hasSupabase){const{error}=await sb.from('site_settings').update(x).eq('id','main');if(error)return toast(error.message)}else{Object.assign(settings,x);storageSet(LS.settings,settings)}Object.assign(settings,x);closeModal();applySettingsToUI();toast('Paramètres enregistrés.')};
 async function adminTeam(){
-  let users=[],apps=[];if(hasSupabase){const [u,a]=await Promise.all([sb.from('profiles').select('id,display_name,phone,role').in('role',['employee','manager','admin']).order('display_name'),sb.from('applications').select('*,jobs(title)').order('created_at',{ascending:false}).limit(20)]);users=u.data||[];apps=a.data||[]}else{users=demo.profile?[demo.profile]:[];apps=demo.applications}
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Équipe & recrutements</h3><span class="eyebrow">COMPTES ÉQUIPE</span><div class="stack" style="margin-top:9px">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="user-round"></i></div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${roleLabel(u.role)} • ${esc(u.phone||'')}</p></div><div class="catalog-actions"><button onclick="changeRolePrompt('${u.id}','${u.role}')"><i data-lucide="shield"></i></button></div></div>`).join('')||'<div class="empty">Aucun compte équipe.</div>'}</div><div class="divider"></div><span class="eyebrow">CANDIDATURES</span><div class="stack" style="margin-top:9px">${apps.map(a=>`<div class="customer-card"><strong>${esc(a.applicant_name)}</strong><p>${esc(a.jobs?.title||a.job_title||'Candidature')} • ${esc(a.phone)}</p><p>${esc(a.message||'')}</p></div>`).join('')||'<div class="empty">Aucune candidature.</div>'}</div>`);iconRefresh();
+  let users=[];if(hasSupabase){const {data,error}=await sb.from('profiles').select('id,display_name,phone,role,staff_role,avatar_url,show_phone,profile_bio').not('staff_role','is',null).order('display_name');if(error)return toast(error.message);users=data||[]}else users=demo.profile?.staff_role?[demo.profile]:[];
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Équipe & accès</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon">${u.avatar_url?`<img src="${esc(u.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="">`:'<i data-lucide="user-round"></i>'}</div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(roleLabel(u.staff_role||u.role))} • ${u.show_phone?esc(u.phone||''):'numéro privé'}</p></div><div class="catalog-actions">${isDirection()?`<button onclick="changeStaffRolePrompt('${u.id}','${u.staff_role||''}')"><i data-lucide="shield"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun compte employé.</div>'}</div>${isDirection()?`<button class="btn primary" style="width:100%;margin-top:13px" onclick="showCreateStaffAccess()"><i data-lucide="key-round"></i> Créer un accès employé</button>`:''}`);iconRefresh();
 }
-window.changeRolePrompt=(id,role)=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Modifier le rôle</h3><div class="form-group"><label>Rôle</label><select id="roleSelect"><option value="customer" ${role==='customer'?'selected':''}>Client</option><option value="employee" ${role==='employee'?'selected':''}>Employé</option><option value="manager" ${role==='manager'?'selected':''}>Responsable</option><option value="admin" ${role==='admin'?'selected':''}>Direction</option></select></div><div class="modal-actions"><button class="btn primary" onclick="saveRole('${id}')">Enregistrer</button></div>`);
-window.saveRole=async id=>{const role=$('#roleSelect').value;if(hasSupabase){const{error}=await sb.rpc('admin_set_role',{p_user_id:id,p_role:role});if(error)return toast(error.message)}else if(String(id)===String(demo.profile.id)){demo.profile.role=role;storageSet(LS.profile,demo.profile)}closeModal();await initAuth();toast('Rôle mis à jour.')};
+window.showCreateStaffAccess=()=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Créer un accès employé</h3><div class="form-group"><label>Rôle</label><select id="staffInviteRole">${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></div><div class="form-group"><label>Nombre d’utilisations</label><input id="staffInviteUses" type="number" min="1" max="20" value="1"></div><div class="form-group"><label>Libellé (facultatif)</label><input id="staffInviteLabel" placeholder="Ex : accès de Maritza"></div><div class="modal-actions"><button class="btn primary" onclick="createStaffAccess()">Générer le code</button></div>`);
+window.createStaffAccess=async()=>{const role=$('#staffInviteRole').value,uses=Math.max(1,Math.min(20,Math.floor(num($('#staffInviteUses').value)||1))),label=$('#staffInviteLabel').value.trim();let code='';if(hasSupabase){const{data,error}=await sb.rpc('create_staff_access_code',{p_staff_role:role,p_max_uses:uses,p_label:label||null});if(error)return toast(error.message);code=Array.isArray(data)?data[0]?.code:data?.code||data}else{code=`LTD-${Math.random().toString(36).slice(2,6).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`}
+  openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Code créé</h3><div class="access-code-box"><small>${esc(roleLabel(role))} • ${uses} utilisation${uses>1?'s':''}</small><code>${esc(code)}</code></div><p class="page-intro">Donnez ce code uniquement à la personne concernée. Elle pourra créer son compte depuis « Espace employés ».</p><button class="btn primary full" onclick="navigator.clipboard?.writeText('${esc(code)}');toast('Code copié.')"><i data-lucide="copy"></i> Copier le code</button>`);iconRefresh();
+};
+window.changeStaffRolePrompt=(id,role)=>openModal(`<button class="icon-btn close" onclick="adminTeam()">×</button><h3>Modifier le rôle</h3><div class="form-group"><label>Rôle</label><select id="staffRoleSelect"><option value="">Retirer l’accès employé</option>${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}" ${role===k?'selected':''}>${esc(v)}</option>`).join('')}</select></div><div class="modal-actions"><button class="btn primary" onclick="saveStaffRole('${id}')">Enregistrer</button></div>`);
+window.saveStaffRole=async id=>{const role=$('#staffRoleSelect').value||null;if(hasSupabase){const{error}=await sb.rpc('admin_set_staff_role',{p_user_id:id,p_staff_role:role});if(error)return toast(error.message)}else if(String(id)===String(demo.profile?.id)){demo.profile.staff_role=role;demo.profile.role=role?(['patron','copatron'].includes(role)?'admin':'employee'):'customer';storageSet(LS.profile,demo.profile)}toast('Rôle mis à jour.');adminTeam();};
 window.adjustPointsPrompt=(id,current)=>openModal(`<button class="icon-btn close" onclick="adminCustomers()">×</button><h3>Points fidélité</h3><div class="loyalty-box"><strong>${current} points actuellement</strong><div>Nombre positif pour ajouter, négatif pour retirer.</div></div><div class="form-group"><label>Ajustement</label><input id="pointsDelta" type="number" value="10"></div><div class="form-group"><label>Motif</label><input id="pointsReason" placeholder="Ex : geste commercial"></div><div class="modal-actions"><button class="btn primary" onclick="savePointsAdjustment('${id}')">Valider</button></div>`);
 window.savePointsAdjustment=async id=>{const delta=Math.trunc(num($('#pointsDelta').value)),reason=$('#pointsReason').value.trim();if(!delta)return toast('Indiquez un ajustement différent de 0.');if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('admin_adjust_loyalty',{p_user_id:id,p_delta:delta,p_reason:reason});if(error)return toast(error.message)}else if(String(id)===String(demo.profile?.id)){demo.profile.loyalty_points=Math.max(0,num(demo.profile.loyalty_points)+delta);storageSet(LS.profile,demo.profile)}closeModal();toast('Points mis à jour.');adminCustomers();};
 async function adminPartnerships(){
@@ -538,16 +692,16 @@ window.setPartnershipStatus=async(id,status)=>{
 
 async function adminCustomers(){
   let users=[];
-  if(hasSupabase){const{data}=await sb.from('profiles').select('id,display_name,phone,role,loyalty_points,created_at').order('created_at',{ascending:false}).limit(100);users=data||[]}
+  if(hasSupabase){const{data}=await sb.from('profiles').select('id,display_name,phone,role,staff_role,loyalty_points,created_at').order('created_at',{ascending:false}).limit(100);users=data||[]}
   else users=demo.profile?[demo.profile]:[];
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Clients</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="user-round"></i></div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(u.phone||'Téléphone non renseigné')} • ${num(u.loyalty_points)} pts • ${roleLabel(u.role)}</p></div><div class="catalog-actions"><button onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})" title="Ajuster les points"><i data-lucide="gift"></i></button><button onclick="changeRolePrompt('${u.id}','${u.role}')" title="Modifier le rôle"><i data-lucide="shield"></i></button></div></div>`).join('')||'<div class="empty">Aucun client.</div>'}</div>`);iconRefresh();
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Clients</h3><div class="stack">${users.map(u=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="user-round"></i></div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(u.phone||'Téléphone non renseigné')} • ${num(u.loyalty_points)} pts • ${roleLabel(u.staff_role||u.role)}</p></div><div class="catalog-actions"><button onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})" title="Ajuster les points"><i data-lucide="gift"></i></button>${isDirection()&&u.staff_role?`<button onclick="changeStaffRolePrompt('${u.id}','${u.staff_role}')" title="Modifier le rôle employé"><i data-lucide="shield"></i></button>`:''}</div></div>`).join('')||'<div class="empty">Aucun client.</div>'}</div>`);iconRefresh();
 }
 
 async function initAuth(){
   if(!hasSupabase)demo.profile=storageGet(LS.profile,null);else await getCurrentProfile();
-  await getSettings();
+  await loadMyPermissions();await getSettings();
   const staff=isStaff();$('#staffNav').classList.toggle('hidden',!staff);if(!staff&&$('#staffView').classList.contains('active'))nav('home');
-  if(!isDirection()&&$('#adminView').classList.contains('active'))nav('home');
+  if(!canManageAnything()&&$('#adminView').classList.contains('active'))nav('home');
   applySettingsToUI();renderHome();initRealtime();
 }
 

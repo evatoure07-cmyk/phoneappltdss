@@ -263,16 +263,19 @@ create policy "profiles update own" on public.profiles for update using (id=auth
 -- Catalogue / contenu public
 DROP POLICY IF EXISTS "products public select" ON public.products;
 DROP POLICY IF EXISTS "products direction all" ON public.products;
+DROP POLICY IF EXISTS "products manage" ON public.products;
 create policy "products public select" on public.products for select using (active=true or public.is_direction());
 create policy "products direction all" on public.products for all using (public.is_direction()) with check (public.is_direction());
 
 DROP POLICY IF EXISTS "announcements public select" ON public.announcements;
 DROP POLICY IF EXISTS "announcements direction all" ON public.announcements;
+DROP POLICY IF EXISTS "announcements manage" ON public.announcements;
 create policy "announcements public select" on public.announcements for select using (active=true or public.is_direction());
 create policy "announcements direction all" on public.announcements for all using (public.is_direction()) with check (public.is_direction());
 
 DROP POLICY IF EXISTS "contacts public select" ON public.contacts;
 DROP POLICY IF EXISTS "contacts direction all" ON public.contacts;
+DROP POLICY IF EXISTS "contacts manage" ON public.contacts;
 create policy "contacts public select" on public.contacts for select using (active=true or public.is_direction());
 create policy "contacts direction all" on public.contacts for all using (public.is_direction()) with check (public.is_direction());
 
@@ -283,11 +286,13 @@ create policy "settings direction update" on public.site_settings for update usi
 
 DROP POLICY IF EXISTS "promotions public select" ON public.promotions;
 DROP POLICY IF EXISTS "promotions direction all" ON public.promotions;
+DROP POLICY IF EXISTS "promotions manage" ON public.promotions;
 create policy "promotions public select" on public.promotions for select using (active=true or public.is_direction());
 create policy "promotions direction all" on public.promotions for all using (public.is_direction()) with check (public.is_direction());
 
 DROP POLICY IF EXISTS "jobs public select" ON public.jobs;
 DROP POLICY IF EXISTS "jobs direction all" ON public.jobs;
+DROP POLICY IF EXISTS "jobs manage" ON public.jobs;
 create policy "jobs public select" on public.jobs for select using (active=true or public.is_direction());
 create policy "jobs direction all" on public.jobs for all using (public.is_direction()) with check (public.is_direction());
 
@@ -575,3 +580,434 @@ end $$;
 
 -- APRÈS avoir créé ton premier compte depuis le site, rends-le Direction :
 -- update public.profiles set role='admin' where id=(select id from auth.users where email='TON_EMAIL');
+
+-- =========================================================
+-- V5 — ÉQUIPE, RÔLES, PERMISSIONS, PACKS, PROFILS & RECRUTEMENT
+-- =========================================================
+
+-- Profils employés détaillés
+alter table public.profiles add column if not exists staff_role text;
+alter table public.profiles add column if not exists avatar_url text default '';
+alter table public.profiles add column if not exists show_phone boolean not null default false;
+alter table public.profiles add column if not exists profile_bio text default '';
+alter table public.profiles drop constraint if exists profiles_staff_role_check;
+alter table public.profiles add constraint profiles_staff_role_check check (
+  staff_role is null or staff_role in (
+    'patron','copatron',
+    'vendeur_novice','vendeur_intermediaire','vendeur_experimente',
+    'pompiste_novice','pompiste_intermediaire','pompiste_experimente',
+    'chef_equipe','livreur','responsable_pompiste','responsable_vente'
+  )
+);
+
+-- Packs
+alter table public.products add column if not exists is_pack boolean not null default false;
+alter table public.products add column if not exists is_pack_of_month boolean not null default false;
+
+create table if not exists public.pack_items (
+  id uuid primary key default gen_random_uuid(),
+  pack_id uuid not null references public.products(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  quantity integer not null default 1 check (quantity > 0),
+  created_at timestamptz not null default now(),
+  unique(pack_id, product_id)
+);
+
+-- Permissions configurables par rôle
+create table if not exists public.role_permissions (
+  staff_role text not null,
+  permission_key text not null,
+  enabled boolean not null default true,
+  updated_at timestamptz not null default now(),
+  primary key (staff_role, permission_key)
+);
+
+-- Codes d'accès employés : seul le hash du code est stocké.
+create table if not exists public.staff_access_codes (
+  id uuid primary key default gen_random_uuid(),
+  code_hash text not null unique,
+  label text,
+  staff_role text not null,
+  max_uses integer not null default 1 check (max_uses > 0),
+  uses integer not null default 0 check (uses >= 0),
+  active boolean not null default true,
+  expires_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Les deux codes initiaux Patron / Co-patron sont pré-hachés.
+-- Le texte en clair n'est jamais publié dans le site ou dans la base.
+insert into public.staff_access_codes(code_hash,label,staff_role,max_uses,active)
+values
+('ba0e6055992f327eb05a4104273d8fc23beaafc5e72c6b27232e88056e530b1e','Accès initial Patron','patron',1,true),
+('7890a38f8f24fdd53d84ebba0434bb29a1b3a34f6d849665d53bcf8f9116b7b0','Accès initial Co-patron','copatron',1,true)
+on conflict (code_hash) do nothing;
+
+-- Helpers V5
+create or replace function public.is_staff() returns boolean
+language sql stable security definer set search_path=public as $$
+  select exists(
+    select 1 from public.profiles
+    where id=auth.uid() and (staff_role is not null or role in ('employee','manager','admin'))
+  );
+$$;
+
+create or replace function public.is_direction() returns boolean
+language sql stable security definer set search_path=public as $$
+  select exists(
+    select 1 from public.profiles
+    where id=auth.uid() and (staff_role in ('patron','copatron') or role in ('manager','admin'))
+  );
+$$;
+
+create or replace function public.has_permission(p_permission text) returns boolean
+language sql stable security definer set search_path=public as $$
+  select public.is_direction() or exists(
+    select 1
+    from public.profiles p
+    join public.role_permissions rp on rp.staff_role=p.staff_role
+    where p.id=auth.uid() and rp.permission_key=p_permission and rp.enabled=true
+  );
+$$;
+
+grant execute on function public.is_staff() to anon,authenticated;
+grant execute on function public.is_direction() to anon,authenticated;
+grant execute on function public.has_permission(text) to authenticated;
+
+create or replace function public.get_my_permissions() returns setof text
+language sql stable security definer set search_path=public as $$
+  select rp.permission_key
+  from public.profiles p
+  join public.role_permissions rp on rp.staff_role=p.staff_role
+  where p.id=auth.uid() and rp.enabled=true;
+$$;
+grant execute on function public.get_my_permissions() to authenticated;
+
+-- Contacts publics des employés : le téléphone ne sort que si l'employé l'autorise.
+create or replace function public.get_public_staff_contacts()
+returns table(id uuid,name text,phone text,label text,avatar_url text,bio text,staff_role text)
+language sql stable security definer set search_path=public as $$
+  select p.id,
+         coalesce(p.display_name,'Employé') as name,
+         case when p.show_phone then coalesce(p.phone,'') else '' end as phone,
+         case p.staff_role
+           when 'patron' then 'Patron'
+           when 'copatron' then 'Co-patron'
+           when 'vendeur_novice' then 'Vendeur novice'
+           when 'vendeur_intermediaire' then 'Vendeur intermédiaire'
+           when 'vendeur_experimente' then 'Vendeur expérimenté'
+           when 'pompiste_novice' then 'Pompiste novice'
+           when 'pompiste_intermediaire' then 'Pompiste intermédiaire'
+           when 'pompiste_experimente' then 'Pompiste expérimenté'
+           when 'chef_equipe' then 'Chef d’équipe'
+           when 'livreur' then 'Livreur'
+           when 'responsable_pompiste' then 'Responsable pompiste'
+           when 'responsable_vente' then 'Responsable vente'
+           else 'Équipe LTD'
+         end as label,
+         coalesce(p.avatar_url,'') as avatar_url,
+         coalesce(p.profile_bio,'') as bio,
+         p.staff_role
+  from public.profiles p
+  where p.staff_role is not null
+  order by case when p.staff_role='patron' then 0 when p.staff_role='copatron' then 1 else 2 end, p.display_name;
+$$;
+grant execute on function public.get_public_staff_contacts() to anon,authenticated;
+
+-- Utiliser un code d'accès sur le compte actuellement connecté.
+create or replace function public.redeem_staff_access_code(p_code text) returns text
+language plpgsql security definer set search_path=public as $$
+declare
+  h text;
+  c public.staff_access_codes%rowtype;
+  new_role text;
+begin
+  if auth.uid() is null then raise exception 'Connectez-vous avant d’utiliser un code'; end if;
+  if coalesce(trim(p_code),'')='' then raise exception 'Code d’accès obligatoire'; end if;
+  h := encode(digest(upper(trim(p_code)),'sha256'),'hex');
+  select * into c from public.staff_access_codes where code_hash=h for update;
+  if c.id is null or not c.active then raise exception 'Code invalide ou désactivé'; end if;
+  if c.expires_at is not null and c.expires_at < now() then raise exception 'Ce code a expiré'; end if;
+  if c.uses >= c.max_uses then raise exception 'Ce code a déjà été utilisé'; end if;
+
+  new_role := c.staff_role;
+  update public.profiles
+  set staff_role=new_role,
+      role=case when new_role in ('patron','copatron') then 'admin' else 'employee' end
+  where id=auth.uid();
+
+  update public.staff_access_codes
+  set uses=uses+1,
+      active=case when uses+1>=max_uses then false else active end
+  where id=c.id;
+  return new_role;
+end; $$;
+grant execute on function public.redeem_staff_access_code(text) to authenticated;
+
+-- Générer un code d'accès côté serveur. Le code en clair n'est renvoyé qu'une seule fois.
+create or replace function public.create_staff_access_code(
+  p_staff_role text,
+  p_max_uses integer default 1,
+  p_label text default null
+) returns table(code text)
+language plpgsql security definer set search_path=public as $$
+declare
+  plain text;
+  h text;
+begin
+  if not public.is_direction() then raise exception 'Accès Patron / Co-patron requis'; end if;
+  if p_staff_role not in (
+    'patron','copatron','vendeur_novice','vendeur_intermediaire','vendeur_experimente',
+    'pompiste_novice','pompiste_intermediaire','pompiste_experimente','chef_equipe','livreur','responsable_pompiste','responsable_vente'
+  ) then raise exception 'Rôle invalide'; end if;
+  p_max_uses := greatest(1,least(coalesce(p_max_uses,1),20));
+  plain := 'LTD-' || upper(substr(encode(gen_random_bytes(6),'hex'),1,4)) || '-' || upper(substr(encode(gen_random_bytes(6),'hex'),1,4)) || '-' || upper(substr(encode(gen_random_bytes(6),'hex'),1,4));
+  h := encode(digest(upper(plain),'sha256'),'hex');
+  insert into public.staff_access_codes(code_hash,label,staff_role,max_uses,created_by)
+  values(h,p_label,p_staff_role,p_max_uses,auth.uid());
+  return query select plain;
+end; $$;
+grant execute on function public.create_staff_access_code(text,integer,text) to authenticated;
+
+create or replace function public.admin_set_staff_role(p_user_id uuid,p_staff_role text) returns void
+language plpgsql security definer set search_path=public as $$
+begin
+  if not public.is_direction() then raise exception 'Accès Patron / Co-patron requis'; end if;
+  if p_staff_role is not null and p_staff_role not in (
+    'patron','copatron','vendeur_novice','vendeur_intermediaire','vendeur_experimente',
+    'pompiste_novice','pompiste_intermediaire','pompiste_experimente','chef_equipe','livreur','responsable_pompiste','responsable_vente'
+  ) then raise exception 'Rôle invalide'; end if;
+  update public.profiles
+  set staff_role=p_staff_role,
+      role=case when p_staff_role is null then 'customer' when p_staff_role in ('patron','copatron') then 'admin' else 'employee' end
+  where id=p_user_id;
+end; $$;
+grant execute on function public.admin_set_staff_role(uuid,text) to authenticated;
+
+create or replace function public.admin_set_role_permissions(p_staff_role text,p_permissions text[]) returns void
+language plpgsql security definer set search_path=public as $$
+declare p text;
+begin
+  if not public.is_direction() then raise exception 'Accès Patron / Co-patron requis'; end if;
+  if p_staff_role in ('patron','copatron') then raise exception 'Patron et Co-patron possèdent toujours tous les accès'; end if;
+  delete from public.role_permissions where staff_role=p_staff_role;
+  foreach p in array coalesce(p_permissions,array[]::text[]) loop
+    insert into public.role_permissions(staff_role,permission_key,enabled) values(p_staff_role,p,true)
+    on conflict (staff_role,permission_key) do update set enabled=true,updated_at=now();
+  end loop;
+end; $$;
+grant execute on function public.admin_set_role_permissions(text,text[]) to authenticated;
+
+-- Permissions par défaut : elles peuvent ensuite être modifiées dans le site.
+insert into public.role_permissions(staff_role,permission_key,enabled) values
+('vendeur_novice','orders_view',true),('vendeur_novice','orders_claim',true),
+('vendeur_intermediaire','orders_view',true),('vendeur_intermediaire','orders_claim',true),('vendeur_intermediaire','orders_manage',true),
+('vendeur_experimente','orders_view',true),('vendeur_experimente','orders_claim',true),('vendeur_experimente','orders_manage',true),
+('livreur','orders_view',true),('livreur','orders_claim',true),('livreur','orders_manage',true),
+('chef_equipe','orders_view',true),('chef_equipe','orders_claim',true),('chef_equipe','orders_manage',true),('chef_equipe','stats_view',true),
+('responsable_pompiste','orders_view',true),('responsable_pompiste','team_manage',true),
+('responsable_vente','orders_view',true),('responsable_vente','orders_claim',true),('responsable_vente','orders_manage',true),
+('responsable_vente','catalog_manage',true),('responsable_vente','packs_manage',true),('responsable_vente','announcements_manage',true),
+('responsable_vente','recruitment_manage',true),('responsable_vente','stats_view',true)
+on conflict (staff_role,permission_key) do nothing;
+
+-- RLS des nouvelles tables
+alter table public.pack_items enable row level security;
+alter table public.role_permissions enable row level security;
+alter table public.staff_access_codes enable row level security;
+
+DROP POLICY IF EXISTS "pack items public select" ON public.pack_items;
+DROP POLICY IF EXISTS "pack items manage" ON public.pack_items;
+create policy "pack items public select" on public.pack_items for select using (
+  exists(select 1 from public.products p where p.id=pack_id and (p.active=true or public.has_permission('packs_manage')))
+);
+create policy "pack items manage" on public.pack_items for all using (public.has_permission('packs_manage')) with check (public.has_permission('packs_manage'));
+
+grant select on public.pack_items to anon,authenticated;
+grant insert,update,delete on public.pack_items to authenticated;
+
+grant select on public.role_permissions to authenticated;
+DROP POLICY IF EXISTS "role permissions direction read" ON public.role_permissions;
+create policy "role permissions direction read" on public.role_permissions for select using (public.is_direction());
+
+-- Aucun accès direct aux hashes des codes depuis le navigateur.
+revoke all on public.staff_access_codes from anon,authenticated;
+
+-- Remplacement des policies V2 par les permissions V5.
+DROP POLICY IF EXISTS "profiles select" ON public.profiles;
+DROP POLICY IF EXISTS "profiles update own" ON public.profiles;
+create policy "profiles select" on public.profiles for select using (
+  id=auth.uid() or public.has_permission('team_manage') or public.has_permission('customers_manage')
+);
+create policy "profiles update own" on public.profiles for update using (id=auth.uid()) with check (id=auth.uid());
+
+DROP POLICY IF EXISTS "products public select" ON public.products;
+DROP POLICY IF EXISTS "products direction all" ON public.products;
+DROP POLICY IF EXISTS "products manage" ON public.products;
+create policy "products public select" on public.products for select using (
+  active=true or public.has_permission('catalog_manage') or public.has_permission('packs_manage')
+);
+create policy "products manage" on public.products for all using (
+  public.has_permission('catalog_manage') or public.has_permission('packs_manage')
+) with check (
+  public.has_permission('catalog_manage') or public.has_permission('packs_manage')
+);
+
+DROP POLICY IF EXISTS "announcements public select" ON public.announcements;
+DROP POLICY IF EXISTS "announcements direction all" ON public.announcements;
+DROP POLICY IF EXISTS "announcements manage" ON public.announcements;
+create policy "announcements public select" on public.announcements for select using (active=true or public.has_permission('announcements_manage'));
+create policy "announcements manage" on public.announcements for all using (public.has_permission('announcements_manage')) with check (public.has_permission('announcements_manage'));
+
+DROP POLICY IF EXISTS "contacts public select" ON public.contacts;
+DROP POLICY IF EXISTS "contacts direction all" ON public.contacts;
+DROP POLICY IF EXISTS "contacts manage" ON public.contacts;
+create policy "contacts public select" on public.contacts for select using (active=true or public.has_permission('contacts_manage'));
+create policy "contacts manage" on public.contacts for all using (public.has_permission('contacts_manage')) with check (public.has_permission('contacts_manage'));
+
+DROP POLICY IF EXISTS "settings direction update" ON public.site_settings;
+DROP POLICY IF EXISTS "settings manage" ON public.site_settings;
+create policy "settings manage" on public.site_settings for update using (public.has_permission('settings_manage')) with check (public.has_permission('settings_manage'));
+
+DROP POLICY IF EXISTS "promotions public select" ON public.promotions;
+DROP POLICY IF EXISTS "promotions direction all" ON public.promotions;
+DROP POLICY IF EXISTS "promotions manage" ON public.promotions;
+create policy "promotions public select" on public.promotions for select using (active=true or public.has_permission('promotions_manage'));
+create policy "promotions manage" on public.promotions for all using (public.has_permission('promotions_manage')) with check (public.has_permission('promotions_manage'));
+
+DROP POLICY IF EXISTS "jobs public select" ON public.jobs;
+DROP POLICY IF EXISTS "jobs direction all" ON public.jobs;
+DROP POLICY IF EXISTS "jobs manage" ON public.jobs;
+create policy "jobs public select" on public.jobs for select using (true);
+create policy "jobs manage" on public.jobs for all using (public.has_permission('recruitment_manage')) with check (public.has_permission('recruitment_manage'));
+
+-- Plus aucune candidature publique depuis le site.
+DROP POLICY IF EXISTS "applications create" ON public.applications;
+DROP POLICY IF EXISTS "applications direction select" ON public.applications;
+DROP POLICY IF EXISTS "applications direction update" ON public.applications;
+revoke insert on public.applications from anon,authenticated;
+
+DROP POLICY IF EXISTS "partnerships direction select" ON public.partnership_requests;
+DROP POLICY IF EXISTS "partnerships direction update" ON public.partnership_requests;
+DROP POLICY IF EXISTS "partnerships manage select" ON public.partnership_requests;
+DROP POLICY IF EXISTS "partnerships manage update" ON public.partnership_requests;
+create policy "partnerships manage select" on public.partnership_requests for select using (public.has_permission('partnerships_manage'));
+create policy "partnerships manage update" on public.partnership_requests for update using (public.has_permission('partnerships_manage')) with check (public.has_permission('partnerships_manage'));
+
+DROP POLICY IF EXISTS "orders select" ON public.orders;
+create policy "orders select" on public.orders for select using (user_id=auth.uid() or public.has_permission('orders_view'));
+DROP POLICY IF EXISTS "order items select" ON public.order_items;
+create policy "order items select" on public.order_items for select using (
+  exists(select 1 from public.orders o where o.id=order_id and (o.user_id=auth.uid() or public.has_permission('orders_view')))
+);
+DROP POLICY IF EXISTS "order events select" ON public.order_events;
+create policy "order events select" on public.order_events for select using (
+  exists(select 1 from public.orders o where o.id=order_id and (o.user_id=auth.uid() or public.has_permission('orders_view')))
+);
+DROP POLICY IF EXISTS "loyalty select" ON public.loyalty_events;
+create policy "loyalty select" on public.loyalty_events for select using (user_id=auth.uid() or public.has_permission('customers_manage'));
+
+-- Colonnes de profil qu'un utilisateur peut modifier lui-même.
+revoke update on public.profiles from authenticated;
+grant update (display_name,phone,favorite_address,avatar_url,show_phone,profile_bio) on public.profiles to authenticated;
+
+-- RPC commandes avec permissions V5
+create or replace function public.claim_order(p_order_id uuid) returns void
+language plpgsql security definer set search_path=public as $$
+declare n text;
+begin
+  if not public.has_permission('orders_claim') then raise exception 'Vous n’avez pas l’accès pour prendre une commande'; end if;
+  select display_name into n from public.profiles where id=auth.uid();
+  update public.orders
+    set assigned_to=auth.uid(),assigned_name=n,assigned_at=coalesce(assigned_at,now()),status=case when status='pending' then 'accepted' else status end
+    where id=p_order_id and status not in ('delivered','cancelled') and (assigned_to is null or assigned_to=auth.uid());
+  if not found then raise exception 'Cette commande est déjà prise ou terminée'; end if;
+  insert into public.order_events(order_id,status,actor_id,actor_name,note)
+  values(p_order_id,'accepted',auth.uid(),n,'Commande prise en charge');
+end; $$;
+grant execute on function public.claim_order(uuid) to authenticated;
+
+create or replace function public.set_order_status(p_order_id uuid,p_status text,p_reason text default null) returns void
+language plpgsql security definer set search_path=public as $$
+declare o public.orders%rowtype; s public.site_settings%rowtype;
+begin
+  if not public.has_permission('orders_manage') then raise exception 'Vous n’avez pas l’accès pour gérer une commande'; end if;
+  if p_status not in ('accepted','preparing','ready','out_for_delivery','delivered','cancelled') then raise exception 'Statut invalide'; end if;
+  select * into o from public.orders where id=p_order_id for update;
+  if o.id is null then raise exception 'Commande introuvable'; end if;
+  if o.assigned_to is not null and o.assigned_to<>auth.uid() and not public.is_direction() then raise exception 'Cette commande est attribuée à un autre employé'; end if;
+  if o.status in ('delivered','cancelled') then raise exception 'Commande déjà terminée'; end if;
+  select * into s from public.site_settings where id='main';
+  if p_status='cancelled' then
+    if coalesce(trim(p_reason),'')='' then raise exception 'Motif d''annulation obligatoire'; end if;
+    if o.used_loyalty_reward and not o.loyalty_refunded then
+      update public.profiles set loyalty_points=loyalty_points+s.loyalty_reward_points where id=o.user_id;
+      insert into public.loyalty_events(user_id,order_id,points,description) values(o.user_id,o.id,s.loyalty_reward_points,'Récompense remboursée après annulation');
+      o.loyalty_refunded:=true;
+    end if;
+    if not o.stock_restocked then
+      update public.products p set stock=p.stock+i.quantity from public.order_items i
+      where i.order_id=o.id and i.product_id=p.id and p.stock is not null;
+      o.stock_restocked:=true;
+    end if;
+  end if;
+  if p_status='delivered' and not o.loyalty_awarded then
+    update public.profiles set loyalty_points=loyalty_points+s.points_per_order where id=o.user_id;
+    insert into public.loyalty_events(user_id,order_id,points,description) values(o.user_id,o.id,s.points_per_order,'Commande livrée');
+    o.loyalty_awarded:=true;
+  end if;
+  update public.orders set status=p_status,cancelled_reason=case when p_status='cancelled' then p_reason else cancelled_reason end,
+    loyalty_refunded=o.loyalty_refunded,stock_restocked=o.stock_restocked,loyalty_awarded=o.loyalty_awarded,
+    delivered_at=case when p_status='delivered' then now() else delivered_at end where id=o.id;
+  insert into public.order_events(order_id,status,actor_id,actor_name,note)
+  select o.id,p_status,auth.uid(),display_name,coalesce(p_reason,'') from public.profiles where id=auth.uid();
+end; $$;
+grant execute on function public.set_order_status(uuid,text,text) to authenticated;
+
+create or replace function public.admin_adjust_loyalty(p_user_id uuid,p_delta integer,p_reason text) returns void
+language plpgsql security definer set search_path=public as $$
+declare current_points integer;
+begin
+  if not public.has_permission('customers_manage') then raise exception 'Accès clients requis'; end if;
+  if p_delta=0 then raise exception 'Aucun ajustement'; end if;
+  if coalesce(trim(p_reason),'')='' then raise exception 'Motif obligatoire'; end if;
+  select loyalty_points into current_points from public.profiles where id=p_user_id for update;
+  if current_points is null then raise exception 'Client introuvable'; end if;
+  if current_points+p_delta<0 then raise exception 'Le solde ne peut pas devenir négatif'; end if;
+  update public.profiles set loyalty_points=loyalty_points+p_delta where id=p_user_id;
+  insert into public.loyalty_events(user_id,points,description) values(p_user_id,p_delta,p_reason);
+end; $$;
+grant execute on function public.admin_adjust_loyalty(uuid,integer,text) to authenticated;
+
+-- Stockage des photos de profil
+insert into storage.buckets(id,name,public) values('staff-avatars','staff-avatars',true)
+on conflict (id) do update set public=true;
+
+DROP POLICY IF EXISTS "staff avatars public read" ON storage.objects;
+DROP POLICY IF EXISTS "staff avatars own insert" ON storage.objects;
+DROP POLICY IF EXISTS "staff avatars own update" ON storage.objects;
+DROP POLICY IF EXISTS "staff avatars own delete" ON storage.objects;
+create policy "staff avatars public read" on storage.objects for select using (bucket_id='staff-avatars');
+create policy "staff avatars own insert" on storage.objects for insert to authenticated with check (
+  bucket_id='staff-avatars' and (storage.foldername(name))[1]=auth.uid()::text
+);
+create policy "staff avatars own update" on storage.objects for update to authenticated using (
+  bucket_id='staff-avatars' and (storage.foldername(name))[1]=auth.uid()::text
+) with check (
+  bucket_id='staff-avatars' and (storage.foldername(name))[1]=auth.uid()::text
+);
+create policy "staff avatars own delete" on storage.objects for delete to authenticated using (
+  bucket_id='staff-avatars' and (storage.foldername(name))[1]=auth.uid()::text
+);
+
+-- Recrutement : les trois postes sont toujours visibles, active=true signifie « recrute ».
+insert into public.jobs(title,description,active)
+select 'Vendeur / Vendeuse','Accueil clients, ventes et tenue de la boutique.',true
+where not exists(select 1 from public.jobs where title='Vendeur / Vendeuse');
+insert into public.jobs(title,description,active)
+select 'Pompiste','Gestion des stations, livraisons d’essence et suivi des stocks.',true
+where not exists(select 1 from public.jobs where title='Pompiste');
+insert into public.jobs(title,description,active)
+select 'Livreur / Livreuse','Préparation et acheminement des commandes clients.',true
+where not exists(select 1 from public.jobs where title='Livreur / Livreuse');

@@ -20,6 +20,7 @@
         <div class="brand-copy"><div class="eyebrow">SANDY SHORES</div><h1>Site officiel</h1></div>
       </button>
       <div class="top-actions">
+        <button class="icon-btn staff-access-btn" id="employeeAccessBtn" aria-label="Espace employés" title="Espace employés"><i data-lucide="badge-check"></i></button>
         <button class="status-dot-wrap" id="businessStatusButton" aria-label="Statut"><span class="status-dot"></span><span id="businessStatusMini">Ouvert</span></button>
         <button class="icon-btn" id="accountBtn" aria-label="Compte"><i data-lucide="user-round"></i></button>
       </div>
@@ -74,6 +75,11 @@
             <span class="utility-copy"><small>ACHATS</small><strong>Mon panier</strong></span>
             <b class="utility-badge" id="homeCartCount">0</b>
           </button>
+          <button class="utility-tile utility-tile-wide" id="homeEmployeeAccess">
+            <span class="utility-icon"><i data-lucide="badge-check"></i></span>
+            <span class="utility-copy"><small>ACCÈS INTERNE</small><strong>Espace employés</strong></span>
+            <i class="utility-arrow" data-lucide="chevron-right"></i>
+          </button>
         </section>
 
         <section class="editorial-section editorial-section-first">
@@ -88,8 +94,8 @@
           <div class="feature-banner-copy">
             <small>NOS OFFRES</small>
             <h3>Les packs du LTD</h3>
-            <p>Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.</p>
-            <button data-nav="packs">Découvrir les packs <i data-lucide="arrow-right"></i></button>
+            <small id="packMonthKicker">PACK DU MOIS & SÉLECTIONS</small><p id="packMonthDesc">Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.</p>
+            <button data-nav="packs" id="packMonthHomeButton">Découvrir les packs <i data-lucide="arrow-right"></i></button>
           </div>
           <div class="feature-banner-mark">PACKS</div>
         </section>
@@ -113,7 +119,7 @@
             <span class="home-service-number">02</span>
             <i data-lucide="badge-user"></i>
             <div><small>NOUS REJOINDRE</small><strong>Recrutement</strong><p>Découvrez les postes ouverts et les prochaines sessions.</p></div>
-            <span class="home-service-cta">Candidater <i data-lucide="arrow-up-right"></i></span>
+            <span class="home-service-cta">Voir les postes <i data-lucide="arrow-up-right"></i></span>
           </button>
         </section>
 
@@ -146,6 +152,7 @@
             <button data-nav="orders">Suivi</button>
             <button data-nav="recruitment">Recrutement</button>
             <button data-nav="contact">Contact</button>
+            <button id="employeeFooterBtn">Espace employés</button>
           </div>
           <p>Votre commerce de proximité à Sandy Shores.</p>
         </footer>
@@ -180,9 +187,9 @@
       <section class="view" id="recruitmentView">
         <div class="section-heading"><div><span class="eyebrow">REJOINDRE L'ÉQUIPE</span><h2>Recrutement</h2></div></div>
         <div class="recruitment-panel standalone-panel">
-          <span class="eyebrow">CANDIDATURES</span>
+          <span class="eyebrow">RECRUTEMENT</span>
           <h3>Envie de travailler au LTD ?</h3>
-          <p>Les sessions de recrutement ont lieu chaque <strong id="recruitDayNews">dimanche</strong>. Découvrez les postes ouverts et envoyez votre candidature.</p>
+          <p>Les sessions de recrutement ont lieu chaque <strong id="recruitDayNews">dimanche</strong>. Consultez les postes recherchés puis présentez-vous directement au LTD.</p>
           <div id="jobsList" class="job-list"></div>
         </div>
       </section>
@@ -222,25 +229,29 @@
       </section>
 
       <section class="view" id="staffView">
-        <div class="section-heading"><div><span class="eyebrow">ESPACE ÉQUIPE</span><h2>Livraisons</h2></div><button class="btn mini" id="refreshStaff"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="section-heading"><div><span class="eyebrow">ESPACE EMPLOYÉS</span><h2>Équipe LTD</h2></div><button class="btn mini" id="refreshStaff"><i data-lucide="refresh-cw"></i></button></div>
+        <div id="staffProfileCard" class="staff-profile-card"></div>
         <div class="staff-kpis" id="staffKpis"></div>
         <div class="staff-tabs"><button class="staff-tab active" data-filter="active">À traiter</button><button class="staff-tab" data-filter="mine">Mes commandes</button><button class="staff-tab" data-filter="all">Historique</button></div>
         <div id="staffOrders" class="stack"></div>
       </section>
 
       <section class="view" id="adminView">
-        <div class="section-heading"><div><span class="eyebrow">DIRECTION</span><h2>Tableau de bord</h2></div><button class="btn mini" id="refreshAdmin"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="section-heading"><div><span class="eyebrow">GESTION LTD</span><h2>Administration</h2></div><button class="btn mini" id="refreshAdmin"><i data-lucide="refresh-cw"></i></button></div>
         <div id="adminStats" class="admin-stats"></div>
         <div class="admin-grid">
-          <button class="admin-card" data-admin="announcement"><i data-lucide="megaphone"></i><span>Annonce</span></button>
-          <button class="admin-card" data-admin="product"><i data-lucide="package-plus"></i><span>Produit</span></button>
-          <button class="admin-card" data-admin="products"><i data-lucide="packages"></i><span>Catalogue</span></button>
-          <button class="admin-card" data-admin="promotion"><i data-lucide="badge-percent"></i><span>Promotion</span></button>
-          <button class="admin-card" data-admin="contacts"><i data-lucide="contact-round"></i><span>Contacts</span></button>
-          <button class="admin-card" data-admin="settings"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
-          <button class="admin-card" data-admin="team"><i data-lucide="users-round"></i><span>Équipe</span></button>
-          <button class="admin-card" data-admin="customers"><i data-lucide="user-round-search"></i><span>Clients</span></button>
-          <button class="admin-card" data-admin="partnerships"><i data-lucide="handshake"></i><span>Partenariats</span></button>
+          <button class="admin-card" data-admin="announcements" data-perm="announcements_manage"><i data-lucide="megaphone"></i><span>Annonces</span></button>
+          <button class="admin-card" data-admin="product" data-perm="catalog_manage"><i data-lucide="package-plus"></i><span>Produit</span></button>
+          <button class="admin-card" data-admin="products" data-perm="catalog_manage"><i data-lucide="packages"></i><span>Catalogue</span></button>
+          <button class="admin-card" data-admin="packs" data-perm="packs_manage"><i data-lucide="package-open"></i><span>Packs</span></button>
+          <button class="admin-card" data-admin="promotion" data-perm="promotions_manage"><i data-lucide="badge-percent"></i><span>Promotions</span></button>
+          <button class="admin-card" data-admin="recruitment" data-perm="recruitment_manage"><i data-lucide="badge-user"></i><span>Recrutement</span></button>
+          <button class="admin-card" data-admin="contacts" data-perm="contacts_manage"><i data-lucide="contact-round"></i><span>Contacts</span></button>
+          <button class="admin-card" data-admin="settings" data-perm="settings_manage"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
+          <button class="admin-card" data-admin="team" data-perm="team_manage"><i data-lucide="users-round"></i><span>Équipe & accès</span></button>
+          <button class="admin-card direction-only" data-admin="permissions"><i data-lucide="list-checks"></i><span>Permissions</span></button>
+          <button class="admin-card" data-admin="customers" data-perm="customers_manage"><i data-lucide="user-round-search"></i><span>Clients</span></button>
+          <button class="admin-card" data-admin="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>
         <div id="adminActivity" class="stack"></div>
