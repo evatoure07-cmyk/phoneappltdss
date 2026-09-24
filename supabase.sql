@@ -112,6 +112,17 @@ create table if not exists public.applications (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.partnership_requests (
+  id uuid primary key default gen_random_uuid(),
+  business_name text not null,
+  contact_name text not null,
+  phone text not null,
+  partnership_type text not null default 'Autre',
+  message text not null default '',
+  status text not null default 'new' check (status in ('new','reviewed','accepted','rejected')),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id),
@@ -221,6 +232,7 @@ alter table public.site_settings enable row level security;
 alter table public.promotions enable row level security;
 alter table public.jobs enable row level security;
 alter table public.applications enable row level security;
+alter table public.partnership_requests enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.loyalty_events enable row level security;
@@ -286,6 +298,13 @@ create policy "applications create" on public.applications for insert with check
 create policy "applications direction select" on public.applications for select using (public.is_direction());
 create policy "applications direction update" on public.applications for update using (public.is_direction()) with check (public.is_direction());
 
+DROP POLICY IF EXISTS "partnerships create" ON public.partnership_requests;
+DROP POLICY IF EXISTS "partnerships direction select" ON public.partnership_requests;
+DROP POLICY IF EXISTS "partnerships direction update" ON public.partnership_requests;
+create policy "partnerships create" on public.partnership_requests for insert with check (true);
+create policy "partnerships direction select" on public.partnership_requests for select using (public.is_direction());
+create policy "partnerships direction update" on public.partnership_requests for update using (public.is_direction()) with check (public.is_direction());
+
 -- Commandes : création / changements via fonctions sécurisées, lecture via RLS
 DROP POLICY IF EXISTS "orders select" ON public.orders;
 create policy "orders select" on public.orders for select using (user_id=auth.uid() or public.is_staff());
@@ -302,10 +321,10 @@ create policy "order events select" on public.order_events for select using (
 
 -- Privilèges API explicites (les policies RLS restent la barrière d'accès).
 grant select on public.products,public.announcements,public.contacts,public.site_settings,public.promotions,public.jobs to anon,authenticated;
-grant insert on public.applications to anon,authenticated;
-grant select on public.profiles,public.orders,public.order_items,public.loyalty_events,public.order_events,public.applications to authenticated;
+grant insert on public.applications,public.partnership_requests to anon,authenticated;
+grant select on public.profiles,public.orders,public.order_items,public.loyalty_events,public.order_events,public.applications,public.partnership_requests to authenticated;
 grant insert,update,delete on public.products,public.announcements,public.contacts,public.promotions,public.jobs to authenticated;
-grant update on public.site_settings,public.applications to authenticated;
+grant update on public.site_settings,public.applications,public.partnership_requests to authenticated;
 
 -- Le client peut uniquement modifier les champs non sensibles de son profil.
 revoke update on public.profiles from authenticated;

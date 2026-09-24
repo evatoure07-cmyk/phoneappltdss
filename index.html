@@ -17,7 +17,7 @@
     <header class="topbar">
       <button class="brand-wrap bare" data-nav="home" aria-label="Accueil">
         <div class="brand-mark">LTD</div>
-        <div class="brand-copy"><div class="eyebrow">SANDY SHORES</div><h1>Boutique & livraison</h1></div>
+        <div class="brand-copy"><div class="eyebrow">SANDY SHORES</div><h1>Site officiel</h1></div>
       </button>
       <div class="top-actions">
         <button class="status-dot-wrap" id="businessStatusButton" aria-label="Statut"><span class="status-dot"></span><span id="businessStatusMini">Ouvert</span></button>
@@ -27,84 +27,197 @@
 
     <main>
       <section class="view active" id="homeView">
-        <div class="hero-card">
-          <div class="hero-glow"></div>
-          <div class="hero-copy">
-            <span class="pill" id="heroStatus">OUVERT • COMMANDES DISPONIBLES</span>
-            <h2>Le Nord, livré jusqu’à vous.</h2>
-            <p>Vos essentiels du LTD Sandy Shores, à commander en quelques secondes.</p>
-            <div class="hero-actions">
-              <button class="btn primary" data-nav="shop"><i data-lucide="shopping-bag"></i> Commander</button>
-              <button class="btn ghost" data-nav="orders"><i data-lucide="receipt-text"></i> Suivre</button>
-            </div>
-          </div>
+        <div class="storefront-strip">
+          <span class="storefront-strip-dot"></span>
+          <span>Site officiel du LTD Sandy Shores</span>
+          <button class="storefront-strip-link" data-nav="news">Voir les nouveautés</button>
         </div>
 
-        <div class="stats-grid">
-          <article class="stat-card"><i data-lucide="truck"></i><strong id="homeDeliveryFee">100 $</strong><span>Livraison</span></article>
-          <article class="stat-card"><i data-lucide="gift"></i><strong>100 pts</strong><span>Livraison offerte</span></article>
-          <article class="stat-card"><i data-lucide="clock-3"></i><strong id="homeEta">10–20 min</strong><span>Estimation habituelle</span></article>
-        </div>
-
-        <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">À LA UNE</span><h3>Nouveautés</h3></div><button class="text-btn" data-nav="news">Tout voir</button></div>
-          <div id="homeAnnouncements" class="stack"></div>
-        </section>
-
-        <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">NOS SERVICES</span><h3>Tout au même endroit</h3></div></div>
-          <div class="service-grid">
-            <button class="service-card" data-nav="shop"><i data-lucide="shopping-basket"></i><strong>Boutique</strong><span>Boissons, nourriture et essentiels</span></button>
-            <button class="service-card" data-nav="shop"><i data-lucide="truck"></i><strong>Livraison</strong><span>À domicile, en entreprise ou sur un lieu précis</span></button>
-            <button class="service-card" id="recruitmentShortcut"><i data-lucide="badge-user"></i><strong>Recrutement</strong><span>Sessions chaque <b id="recruitDayInline">dimanche</b></span></button>
-            <button class="service-card" id="callBusiness"><i data-lucide="phone-call"></i><strong>Nous appeler</strong><span id="businessPhoneInline">Numéro à renseigner</span></button>
+        <section class="editorial-hero">
+          <div class="editorial-hero-noise"></div>
+          <div class="editorial-hero-topline">
+            <span class="editorial-location"><i data-lucide="map-pin"></i> Sandy Shores</span>
+            <span class="editorial-status pill" id="heroStatus">OUVERT</span>
           </div>
-        </section>
-
-        <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">LE LTD</span><h3>Votre commerce du Nord</h3></div></div>
-          <div class="info-card">
-            <div class="info-icon"><i data-lucide="store"></i></div>
-            <div><strong>Proximité, service et disponibilité.</strong><p>Le LTD Sandy Shores réunit boutique, station-service et livraison pour vous permettre de récupérer vos essentiels simplement, où que vous soyez.</p></div>
+          <div class="editorial-hero-copy">
+            <span class="editorial-kicker">LTD • CONVENIENCE STORE</span>
+            <h2>Le commerce<br>du Nord.</h2>
+            <p>Produits du quotidien, packs, nouveautés et services pour particuliers comme professionnels.</p>
           </div>
-        </section>
-
-        <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">NOUS TROUVER</span><h3>LTD Sandy Shores</h3></div></div>
-          <div class="info-card">
-            <div class="info-icon"><i data-lucide="map-pin"></i></div>
-            <div><strong id="businessAddress">Route 68 — Sandy Shores, Blaine County</strong><p id="businessHours">Ouvert selon les disponibilités de l'équipe</p></div>
+          <div class="editorial-hero-actions">
+            <button class="editorial-primary" data-nav="shop"><span>Découvrir le catalogue</span><i data-lucide="arrow-up-right"></i></button>
+            <button class="editorial-secondary" data-nav="partner"><span>Devenir partenaire</span><i data-lucide="handshake"></i></button>
           </div>
+          <div class="editorial-hero-wordmark">SANDY</div>
         </section>
 
-        <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">CONTACTS</span><h3>Équipe & responsables</h3></div></div>
-          <div id="contactsList" class="contacts-grid"></div>
+        <section class="utility-panel">
+          <button class="utility-tile utility-tile-wide" data-nav="shop">
+            <span class="utility-icon"><i data-lucide="shopping-bag"></i></span>
+            <span class="utility-copy"><small>ACHETER</small><strong>Catalogue</strong></span>
+            <i class="utility-arrow" data-lucide="chevron-right"></i>
+          </button>
+          <button class="utility-tile" data-nav="orders">
+            <span class="utility-icon"><i data-lucide="package-check"></i></span>
+            <span class="utility-copy"><small>COMMANDES</small><strong>Suivi</strong></span>
+          </button>
+          <button class="utility-tile" data-nav="packs">
+            <span class="utility-icon"><i data-lucide="package-open"></i></span>
+            <span class="utility-copy"><small>OFFRES</small><strong>Packs</strong></span>
+          </button>
+          <button class="utility-tile" data-nav="news">
+            <span class="utility-icon"><i data-lucide="sparkles"></i></span>
+            <span class="utility-copy"><small>ACTUALITÉS</small><strong>Nouveautés</strong></span>
+          </button>
+          <button class="utility-tile" id="homeCartShortcut">
+            <span class="utility-icon"><i data-lucide="shopping-cart"></i></span>
+            <span class="utility-copy"><small>ACHATS</small><strong>Mon panier</strong></span>
+            <b class="utility-badge" id="homeCartCount">0</b>
+          </button>
         </section>
+
+        <section class="editorial-section editorial-section-first">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">01</span><div><small>SÉLECTION DU LTD</small><h3>Produits du mois</h3></div></div>
+            <button class="editorial-link" data-nav="shop">Tout voir <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div id="homeMonthProducts" class="home-product-row editorial-products"></div>
+        </section>
+
+        <section class="feature-banner feature-banner-packs">
+          <div class="feature-banner-copy">
+            <small>NOS OFFRES</small>
+            <h3>Les packs du LTD</h3>
+            <p>Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.</p>
+            <button data-nav="packs">Découvrir les packs <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div class="feature-banner-mark">PACKS</div>
+        </section>
+
+        <section class="editorial-section">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">02</span><div><small>JUSTE ARRIVÉ</small><h3>Nouvelles arrivées</h3></div></div>
+            <button class="editorial-link" id="homeNewProductsLink">Tout voir <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div id="homeNewProducts" class="home-product-row editorial-products"></div>
+        </section>
+
+        <section class="home-service-rail">
+          <button data-nav="partner" class="home-service-card home-service-card-dark">
+            <span class="home-service-number">01</span>
+            <i data-lucide="handshake"></i>
+            <div><small>ENTREPRISES</small><strong>Devenir partenaire</strong><p>Approvisionnement, livraisons régulières et accords dédiés.</p></div>
+            <span class="home-service-cta">En savoir plus <i data-lucide="arrow-up-right"></i></span>
+          </button>
+          <button data-nav="recruitment" class="home-service-card">
+            <span class="home-service-number">02</span>
+            <i data-lucide="badge-user"></i>
+            <div><small>NOUS REJOINDRE</small><strong>Recrutement</strong><p>Découvrez les postes ouverts et les prochaines sessions.</p></div>
+            <span class="home-service-cta">Candidater <i data-lucide="arrow-up-right"></i></span>
+          </button>
+        </section>
+
+        <section class="editorial-section">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">03</span><div><small>LE JOURNAL DU LTD</small><h3>Dernières nouveautés</h3></div></div>
+            <button class="editorial-link" data-nav="news">Tout voir <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div id="homeAnnouncements" class="stack editorial-news"></div>
+        </section>
+
+        <section class="store-info-panel">
+          <div class="store-info-title">
+            <small>INFORMATIONS</small>
+            <h3>LTD Sandy Shores</h3>
+          </div>
+          <div class="store-info-grid">
+            <div><span><i data-lucide="map-pin"></i> Adresse</span><strong id="businessAddress">Route 68 — Sandy Shores, Blaine County</strong></div>
+            <div><span><i data-lucide="clock-3"></i> Horaires</span><strong id="businessHours">Ouvert selon les disponibilités de l'équipe</strong></div>
+            <div><span><i data-lucide="truck"></i> Livraison</span><strong id="homeDeliveryFee">100 $</strong></div>
+            <div><span><i data-lucide="timer"></i> Délai indicatif</span><strong id="homeEta">10–20 min</strong></div>
+          </div>
+          <button class="store-info-contact" data-nav="contact"><span>Contacter le LTD</span><i data-lucide="arrow-right"></i></button>
+        </section>
+
+        <footer class="home-footer">
+          <div class="home-footer-brand"><span>LTD</span><strong>SANDY SHORES</strong></div>
+          <div class="home-footer-links">
+            <button data-nav="shop">Catalogue</button>
+            <button data-nav="orders">Suivi</button>
+            <button data-nav="recruitment">Recrutement</button>
+            <button data-nav="contact">Contact</button>
+          </div>
+          <p>Votre commerce de proximité à Sandy Shores.</p>
+        </footer>
       </section>
 
       <section class="view" id="shopView">
-        <div class="section-heading sticky-head"><div><span class="eyebrow">COMMANDER</span><h2>La boutique</h2></div><button class="cart-chip" id="cartButton"><i data-lucide="shopping-cart"></i><span id="cartCount">0</span></button></div>
-        <div id="shopClosedBanner" class="notice warning hidden"><i data-lucide="store"></i><div><strong>Commandes momentanément fermées</strong><span>Vous pouvez consulter la carte, mais la validation est désactivée.</span></div></div>
+        <div class="section-heading sticky-head"><div><span class="eyebrow">NOS PRODUITS</span><h2>Catalogue</h2></div><button class="cart-chip" id="cartButton"><i data-lucide="shopping-cart"></i><span id="cartCount">0</span></button></div>
+        <div id="shopClosedBanner" class="notice warning hidden"><i data-lucide="store"></i><div><strong>Commandes momentanément fermées</strong><span>Vous pouvez toujours consulter le catalogue.</span></div></div>
         <div class="search-wrap"><i data-lucide="search"></i><input id="productSearch" placeholder="Rechercher un article…" /></div>
         <div id="categoryChips" class="chips"></div>
         <div id="promoStrip" class="promo-strip hidden"></div>
         <div id="productGrid" class="product-grid"></div>
       </section>
 
+      <section class="view" id="packsView">
+        <div class="section-heading"><div><span class="eyebrow">OFFRES</span><h2>Nos packs</h2></div><button class="cart-chip" id="packsCartButton"><i data-lucide="shopping-cart"></i><span id="packsCartCount">0</span></button></div>
+        <p class="page-intro">Retrouvez ici les packs et offres regroupées disponibles au LTD.</p>
+        <div id="packsGrid" class="product-grid"></div>
+      </section>
+
       <section class="view" id="ordersView">
-        <div class="section-heading"><div><span class="eyebrow">MES COMMANDES</span><h2>Suivi</h2></div><button class="btn mini" id="refreshOrders"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="section-heading"><div><span class="eyebrow">MES COMMANDES</span><h2>Suivi de commande</h2></div><button class="btn mini" id="refreshOrders"><i data-lucide="refresh-cw"></i></button></div>
+        <p class="page-intro">Consultez l’avancement de vos commandes et retrouvez votre historique.</p>
         <div id="ordersList" class="stack"></div>
       </section>
 
       <section class="view" id="newsView">
-        <div class="section-heading"><div><span class="eyebrow">ACTUALITÉS</span><h2>Le journal du LTD</h2></div></div>
+        <div class="section-heading"><div><span class="eyebrow">NOUVEAUTÉS</span><h2>Actualités du LTD</h2></div></div>
         <div id="newsList" class="stack"></div>
-        <section class="recruitment-panel" id="recruitmentPanel">
-          <span class="eyebrow">REJOINDRE L'ÉQUIPE</span>
+      </section>
+
+      <section class="view" id="recruitmentView">
+        <div class="section-heading"><div><span class="eyebrow">REJOINDRE L'ÉQUIPE</span><h2>Recrutement</h2></div></div>
+        <div class="recruitment-panel standalone-panel">
+          <span class="eyebrow">CANDIDATURES</span>
           <h3>Envie de travailler au LTD ?</h3>
-          <p>Les sessions de recrutement ont lieu chaque <strong id="recruitDayNews">dimanche</strong>. Consultez les postes ouverts et préparez votre candidature.</p>
+          <p>Les sessions de recrutement ont lieu chaque <strong id="recruitDayNews">dimanche</strong>. Découvrez les postes ouverts et envoyez votre candidature.</p>
           <div id="jobsList" class="job-list"></div>
+        </div>
+      </section>
+
+      <section class="view" id="partnerView">
+        <div class="section-heading"><div><span class="eyebrow">PROFESSIONNELS</span><h2>Devenir partenaire</h2></div></div>
+        <div class="partner-hero">
+          <i data-lucide="handshake"></i>
+          <h3>Construisons un partenariat utile.</h3>
+          <p>Entreprise, association ou structure locale : présentez-nous votre besoin et notre direction pourra revenir vers vous.</p>
+        </div>
+        <div class="partner-benefits">
+          <div><i data-lucide="badge-dollar-sign"></i><strong>Conditions dédiées</strong><span>Tarifs ou avantages selon l’accord établi.</span></div>
+          <div><i data-lucide="truck"></i><strong>Livraisons régulières</strong><span>Organisation adaptée aux besoins professionnels.</span></div>
+          <div><i data-lucide="users"></i><strong>Contact direct</strong><span>Un échange avec la direction du LTD.</span></div>
+        </div>
+        <form class="site-form" id="partnerForm">
+          <div class="form-group"><label>Entreprise / organisation</label><input id="partnerBusiness" required placeholder="Nom de votre structure"></div>
+          <div class="form-grid"><div class="form-group"><label>Votre nom</label><input id="partnerName" required placeholder="Prénom & nom"></div><div class="form-group"><label>Téléphone</label><input id="partnerPhone" required placeholder="Numéro de contact"></div></div>
+          <div class="form-group"><label>Type de partenariat</label><select id="partnerType"><option>Approvisionnement régulier</option><option>Livraison entreprise</option><option>Avantages croisés</option><option>Événement / collaboration</option><option>Autre</option></select></div>
+          <div class="form-group"><label>Votre demande</label><textarea id="partnerMessage" required placeholder="Expliquez-nous ce que vous souhaitez mettre en place…"></textarea></div>
+          <button class="btn primary full" type="submit"><i data-lucide="send"></i> Envoyer ma demande</button>
+        </form>
+      </section>
+
+      <section class="view" id="contactView">
+        <div class="section-heading"><div><span class="eyebrow">NOUS JOINDRE</span><h2>Contact</h2></div></div>
+        <div class="info-card contact-main-card">
+          <div class="info-icon"><i data-lucide="map-pin"></i></div>
+          <div><strong id="contactBusinessAddress">Route 68 — Sandy Shores, Blaine County</strong><p id="contactBusinessHours">Ouvert selon les disponibilités de l'équipe</p></div>
+        </div>
+        <button class="btn primary full contact-call" id="callBusiness"><i data-lucide="phone-call"></i> Appeler le LTD</button>
+        <section class="section-block">
+          <div class="section-heading"><div><span class="eyebrow">ÉQUIPE</span><h3>Responsables</h3></div></div>
+          <div id="contactsList" class="contacts-grid"></div>
         </section>
       </section>
 
@@ -127,6 +240,7 @@
           <button class="admin-card" data-admin="settings"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
           <button class="admin-card" data-admin="team"><i data-lucide="users-round"></i><span>Équipe</span></button>
           <button class="admin-card" data-admin="customers"><i data-lucide="user-round-search"></i><span>Clients</span></button>
+          <button class="admin-card" data-admin="partnerships"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>
         <div id="adminActivity" class="stack"></div>
@@ -135,9 +249,10 @@
 
     <nav class="bottom-nav">
       <button class="nav-item active" data-nav="home"><i data-lucide="house"></i><span>Accueil</span></button>
-      <button class="nav-item" data-nav="shop"><i data-lucide="shopping-bag"></i><span>Boutique</span></button>
-      <button class="nav-item" data-nav="orders"><i data-lucide="receipt-text"></i><span>Commandes</span></button>
-      <button class="nav-item" data-nav="news"><i data-lucide="bell"></i><span>Actus</span></button>
+      <button class="nav-item" data-nav="shop"><i data-lucide="layout-grid"></i><span>Catalogue</span></button>
+      <button class="nav-item" id="bottomCartButton"><i data-lucide="shopping-cart"></i><span>Panier</span><b class="nav-cart-badge" id="bottomCartCount">0</b></button>
+      <button class="nav-item" data-nav="orders"><i data-lucide="map-pinned"></i><span>Suivi</span></button>
+      <button class="nav-item" data-nav="contact"><i data-lucide="phone"></i><span>Contact</span></button>
       <button class="nav-item hidden" id="staffNav" data-nav="staff"><i data-lucide="clipboard-check"></i><span>Équipe</span></button>
     </nav>
   </div>

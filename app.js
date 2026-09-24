@@ -5,7 +5,7 @@ const sb = hasSupabase ? window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE
 const LS = {
   profile: 'ltd_v2_profile', orders: 'ltd_v2_orders', products: 'ltd_v2_products',
   announcements: 'ltd_v2_announcements', contacts: 'ltd_v2_contacts', settings: 'ltd_v2_settings',
-  promotions: 'ltd_v2_promotions', jobs: 'ltd_v2_jobs', applications: 'ltd_v2_applications'
+  promotions: 'ltd_v2_promotions', jobs: 'ltd_v2_jobs', applications: 'ltd_v2_applications', partnerships: 'ltd_v3_partnerships'
 };
 
 const defaults = {
@@ -45,7 +45,8 @@ const defaults = {
 const demo = {
   profile: null, user: null, cart: [], products: [], announcements: [], contacts: [], promotions: [], jobs: [],
   orders: JSON.parse(localStorage.getItem(LS.orders) || '[]'),
-  applications: JSON.parse(localStorage.getItem(LS.applications) || '[]')
+  applications: JSON.parse(localStorage.getItem(LS.applications) || '[]'),
+  partnerships: JSON.parse(localStorage.getItem(LS.partnerships) || '[]')
 };
 let settings = {...defaults.settings};
 let activeCategory = 'Tous';
@@ -133,7 +134,15 @@ async function getJobs(){
 function nav(name){
   $$('.view').forEach(v=>v.classList.remove('active')); $(`#${name}View`)?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome(); if(name==='shop')renderShop(); if(name==='orders')renderOrders(); if(name==='news')renderNews(); if(name==='staff')renderStaff(staffFilter); if(name==='admin')renderAdmin();
+  if(name==='home')renderHome();
+  if(name==='shop')renderShop();
+  if(name==='packs')renderPacks();
+  if(name==='orders')renderOrders();
+  if(name==='news')renderNews();
+  if(name==='recruitment')renderRecruitment();
+  if(name==='contact')renderContact();
+  if(name==='staff')renderStaff(staffFilter);
+  if(name==='admin')renderAdmin();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
@@ -141,36 +150,72 @@ document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(
 
 function applySettingsToUI(){
   const open=Boolean(settings.business_open);
-  $('#businessStatusMini').textContent=open?'Ouvert':'Fermé'; $('.status-dot').classList.toggle('closed',!open);
-  $('#heroStatus').textContent=open?'OUVERT • COMMANDES DISPONIBLES':'FERMÉ • COMMANDES EN PAUSE'; $('#heroStatus').classList.toggle('closed',!open);
-  $('#homeDeliveryFee').textContent=money(settings.delivery_fee); $('#homeEta').textContent=`${settings.delivery_eta_min}–${settings.delivery_eta_max} min`;
-  $('#businessAddress').textContent=settings.address; $('#businessHours').textContent=settings.hours_text;
-  $('#recruitDayInline').textContent=String(settings.recruitment_day).toLowerCase(); $('#recruitDayNews').textContent=String(settings.recruitment_day).toLowerCase();
-  $('#businessPhoneInline').textContent=settings.phone==='À renseigner'?'Numéro à renseigner':settings.phone;
-  $('#shopClosedBanner').classList.toggle('hidden',open);
+  $('#businessStatusMini') && ($('#businessStatusMini').textContent=open?'Ouvert':'Fermé');
+  $('.status-dot')?.classList.toggle('closed',!open);
+  if($('#heroStatus')){ $('#heroStatus').textContent=open?'OUVERT':'FERMÉ'; $('#heroStatus').classList.toggle('closed',!open); }
+  $('#homeDeliveryFee') && ($('#homeDeliveryFee').textContent=money(settings.delivery_fee));
+  $('#homeEta') && ($('#homeEta').textContent=`${settings.delivery_eta_min}–${settings.delivery_eta_max} min`);
+  $('#businessAddress') && ($('#businessAddress').textContent=settings.address);
+  $('#businessHours') && ($('#businessHours').textContent=settings.hours_text);
+  $('#contactBusinessAddress') && ($('#contactBusinessAddress').textContent=settings.address);
+  $('#contactBusinessHours') && ($('#contactBusinessHours').textContent=settings.hours_text);
+  $('#recruitDayNews') && ($('#recruitDayNews').textContent=String(settings.recruitment_day).toLowerCase());
+  $('#shopClosedBanner')?.classList.toggle('hidden',open);
 }
 
 async function renderHome(){
   await getSettings(); applySettingsToUI();
-  const [anns,contacts]=await Promise.all([getAnnouncements(),getContacts()]);
+  const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
+  demo.products=products;
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
-  $('#contactsList').innerHTML=contacts.map(c=>`<article class="contact-card"><span>${esc(c.label)}</span><strong>${esc(c.name)}</strong><a href="${validPhone(c.phone)?`tel:${esc(c.phone)}`:'#'}" data-phone="${esc(c.phone)}">${esc(c.phone)}</a></article>`).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
+  const month=products.filter(p=>p.popular && p.available!==false).slice(0,4);
+  const monthFallback=month.length?month:products.filter(p=>p.available!==false).slice(0,4);
+  $('#homeMonthProducts').innerHTML=monthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les produits du mois seront bientôt annoncés.</div>';
+  const arrivals=products.filter(p=>p.is_new && p.available!==false).slice(0,4);
+  $('#homeNewProducts').innerHTML=arrivals.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les nouvelles arrivées seront bientôt disponibles.</div>';
+  if($('#contactsList')) $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
+  updateCartCount();
   iconRefresh();
+}
+function homeProductHTML(p){
+  return `<button class="home-product-card" onclick="openCatalogProduct('${p.id}')"><div class="home-product-visual">${esc(p.emoji||'🛒')}${p.is_new?'<span>Nouveau</span>':''}</div><strong>${esc(p.name)}</strong><small>${money(p.price)}</small></button>`;
+}
+window.openCatalogProduct=id=>{
+  const product=demo.products.find(p=>String(p.id)===String(id));
+  activeCategory='Tous'; nav('shop');
+  setTimeout(()=>{ const search=$('#productSearch'); if(search){search.value=product?.name||'';renderShop();} },40);
+};
+function contactHTML(c){
+  return `<article class="contact-card"><span>${esc(c.label)}</span><strong>${esc(c.name)}</strong><a href="${validPhone(c.phone)?`tel:${esc(c.phone)}`:'#'}" data-phone="${esc(c.phone)}">${esc(c.phone)}</a></article>`;
 }
 function announcementHTML(a){
   const type=({recruitment:'RECRUTEMENT',alert:'INFORMATION',promotion:'OFFRE',news:'ACTUALITÉ'})[a.type]||'ACTUALITÉ';
   return `<article class="announcement ${a.featured?'featured':''}"><div class="meta"><span>${type}${a.featured?' • NOUVEAU':''}</span><span>${new Date(a.created_at).toLocaleDateString('fr-FR')}</span></div><h4>${esc(a.title)}</h4><p>${esc(a.body)}</p></article>`;
 }
 async function renderNews(){
-  const [anns,jobs]=await Promise.all([getAnnouncements(),getJobs()]);
+  const anns=await getAnnouncements();
   $('#newsList').innerHTML=anns.map(announcementHTML).join('')||'<div class="empty">Aucune actualité.</div>';
-  $('#jobsList').innerHTML=jobs.map(j=>`<div class="job-card"><strong>${esc(j.title)}</strong><span>${esc(j.description)}</span><button class="text-btn" style="padding:8px 0 0" onclick="showApplication('${j.id}')">Postuler</button></div>`).join('')||'<div class="empty">Aucun poste ouvert actuellement.</div>';
   iconRefresh();
+}
+async function renderRecruitment(){
+  await getSettings(); applySettingsToUI(); demo.jobs=await getJobs();
+  $('#jobsList').innerHTML=demo.jobs.map(j=>`<div class="job-card"><strong>${esc(j.title)}</strong><span>${esc(j.description)}</span><button class="text-btn" style="padding:8px 0 0" onclick="showApplication('${j.id}')">Postuler</button></div>`).join('')||'<div class="empty">Aucun poste ouvert actuellement.</div>';
+  iconRefresh();
+}
+async function renderContact(){
+  await getSettings(); applySettingsToUI(); const contacts=await getContacts();
+  $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
+  iconRefresh();
+}
+async function renderPacks(){
+  await getSettings(); const all=await getProducts(); demo.products=all;
+  const packs=all.filter(p=>String(p.category||'').toLowerCase().includes('pack') || String(p.name||'').toLowerCase().startsWith('pack'));
+  $('#packsGrid').innerHTML=packs.map(productHTML).join('')||'<div class="empty" style="grid-column:1/-1">Aucun pack n’est disponible pour le moment.</div>';
+  updateCartCount(); iconRefresh();
 }
 
 function validPhone(phone){return phone && phone!=='À renseigner' && /\d/.test(phone)}
-$('#callBusiness').addEventListener('click',()=>{if(validPhone(settings.phone))location.href=`tel:${settings.phone}`;else toast('Le numéro du LTD sera bientôt disponible.')});
-$('#recruitmentShortcut').addEventListener('click',()=>{nav('news');setTimeout(()=>$('#recruitmentPanel')?.scrollIntoView({behavior:'smooth'}),80)});
+$('#callBusiness')?.addEventListener('click',()=>{if(validPhone(settings.phone))location.href=`tel:${settings.phone}`;else toast('Le numéro du LTD sera bientôt disponible.')});
 $('#businessStatusButton').addEventListener('click',()=>toast(settings.business_open?'Le LTD accepte actuellement les commandes.':'Les commandes sont momentanément fermées.'));
 document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');if(a && !validPhone(a.dataset.phone)){e.preventDefault();toast('Ce numéro sera bientôt renseigné.')}});
 
@@ -206,8 +251,12 @@ function addToCart(id){
   const row=demo.cart.find(x=>String(x.id)===String(id)); if(row)row.qty=Math.min((p.stock??999),row.qty+qty);else demo.cart.push({...p,qty});
   if(input)input.value=1; updateCartCount();toast(`${qty} × ${p.name} ajouté${qty>1?'s':''}`);
 }
-function updateCartCount(){ $('#cartCount').textContent=demo.cart.reduce((a,b)=>a+b.qty,0) }
-$('#cartButton').addEventListener('click',showCart);
+function updateCartCount(){ const count=demo.cart.reduce((a,b)=>a+b.qty,0); $('#cartCount') && ($('#cartCount').textContent=count); $('#homeCartCount') && ($('#homeCartCount').textContent=count); $('#bottomCartCount') && ($('#bottomCartCount').textContent=count); $('#packsCartCount') && ($('#packsCartCount').textContent=count); }
+$('#cartButton')?.addEventListener('click',showCart);
+$('#packsCartButton')?.addEventListener('click',showCart);
+$('#homeCartShortcut')?.addEventListener('click',showCart);
+$('#bottomCartButton')?.addEventListener('click',showCart);
+$('#homeNewProductsLink')?.addEventListener('click',()=>{activeCategory='Nouveautés';nav('shop')});
 
 function cartSubtotal(){return demo.cart.reduce((a,b)=>a+num(b.price)*num(b.qty),0)}
 function activeAutoPromo(){return demo.promotions?.find(p=>p.active!==false&&p.auto_apply&&promotionTimeValid(p))||null}
@@ -378,7 +427,7 @@ window.submitAuth=async mode=>{
     demo.user={id:'demo-user',email};demo.profile={id:'demo-user',display_name:($('#authName')?.value||email.split('@')[0]),phone:($('#authPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};storageSet(LS.profile,demo.profile);closeModal();await initAuth();toast('Compte créé.');
   }
 };
-$('#accountBtn').addEventListener('click',showAccount);
+$('#accountBtn')?.addEventListener('click',showAccount);
 function roleLabel(r){return ({customer:'Client',employee:'Employé',manager:'Responsable',admin:'Direction'})[r]||r}
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
@@ -406,6 +455,26 @@ window.submitApplication=async jobId=>{
   if(hasSupabase){const{error}=await sb.from('applications').insert(x);if(error)return toast(error.message)}else{demo.applications.unshift({...x,id:uid('app'),created_at:new Date().toISOString()});storageSet(LS.applications,demo.applications)}closeModal();toast('Candidature envoyée.');
 };
 
+$('#partnerForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const request={
+    business_name:($('#partnerBusiness')?.value||'').trim(),
+    contact_name:($('#partnerName')?.value||'').trim(),
+    phone:($('#partnerPhone')?.value||'').trim(),
+    partnership_type:$('#partnerType')?.value||'Autre',
+    message:($('#partnerMessage')?.value||'').trim(),
+    status:'new'
+  };
+  if(!request.business_name||!request.contact_name||!request.phone||!request.message)return toast('Complétez les champs obligatoires.');
+  if(hasSupabase){
+    const {error}=await sb.from('partnership_requests').insert(request);
+    if(error)return toast(error.message);
+  }else{
+    demo.partnerships.unshift({...request,id:uid('partner'),created_at:new Date().toISOString()});storageSet(LS.partnerships,demo.partnerships);
+  }
+  e.target.reset(); toast('Votre demande de partenariat a bien été envoyée.');
+});
+
 async function renderAdmin(){
   if(!isDirection()){ $('#adminView').innerHTML='<div class="empty">Accès réservé à la direction.</div>';return }
   let orders=[];
@@ -426,7 +495,7 @@ async function renderAdmin(){
 $('#refreshAdmin').addEventListener('click',renderAdmin);
 document.addEventListener('click',e=>{
   const a=e.target.closest('[data-admin]');if(!a)return;
-  ({announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,promotion:adminPromotion,contacts:adminContacts,settings:adminSettings,team:adminTeam,customers:adminCustomers})[a.dataset.admin]?.();
+  ({announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,promotion:adminPromotion,contacts:adminContacts,settings:adminSettings,team:adminTeam,customers:adminCustomers,partnerships:adminPartnerships})[a.dataset.admin]?.();
 });
 function adminAnnouncement(){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Publier une annonce</h3><div class="form-group"><label>Titre</label><input id="annTitle"></div><div class="form-group"><label>Texte</label><textarea id="annBody"></textarea></div><div class="form-group"><label>Type</label><select id="annType"><option value="news">Actualité</option><option value="recruitment">Recrutement</option><option value="promotion">Promotion</option><option value="alert">Information importante</option></select></div><label class="checkbox-row"><input type="checkbox" id="annFeatured"> Mettre à la une / Nouveau</label><div class="modal-actions"><button class="btn primary" onclick="saveAnnouncement()">Publier</button></div>`)}
 window.saveAnnouncement=async()=>{const x={title:$('#annTitle').value.trim(),body:$('#annBody').value.trim(),type:$('#annType').value,featured:$('#annFeatured').checked,active:true};if(!x.title||!x.body)return toast('Titre et texte obligatoires.');if(hasSupabase){const{error}=await sb.from('announcements').insert(x);if(error)return toast(error.message)}else{demo.announcements.unshift({...x,id:uid('ann'),created_at:new Date().toISOString()});storageSet(LS.announcements,demo.announcements)}closeModal();renderHome();toast('Annonce publiée.')};
@@ -455,6 +524,18 @@ window.changeRolePrompt=(id,role)=>openModal(`<button class="icon-btn close" onc
 window.saveRole=async id=>{const role=$('#roleSelect').value;if(hasSupabase){const{error}=await sb.rpc('admin_set_role',{p_user_id:id,p_role:role});if(error)return toast(error.message)}else if(String(id)===String(demo.profile.id)){demo.profile.role=role;storageSet(LS.profile,demo.profile)}closeModal();await initAuth();toast('Rôle mis à jour.')};
 window.adjustPointsPrompt=(id,current)=>openModal(`<button class="icon-btn close" onclick="adminCustomers()">×</button><h3>Points fidélité</h3><div class="loyalty-box"><strong>${current} points actuellement</strong><div>Nombre positif pour ajouter, négatif pour retirer.</div></div><div class="form-group"><label>Ajustement</label><input id="pointsDelta" type="number" value="10"></div><div class="form-group"><label>Motif</label><input id="pointsReason" placeholder="Ex : geste commercial"></div><div class="modal-actions"><button class="btn primary" onclick="savePointsAdjustment('${id}')">Valider</button></div>`);
 window.savePointsAdjustment=async id=>{const delta=Math.trunc(num($('#pointsDelta').value)),reason=$('#pointsReason').value.trim();if(!delta)return toast('Indiquez un ajustement différent de 0.');if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('admin_adjust_loyalty',{p_user_id:id,p_delta:delta,p_reason:reason});if(error)return toast(error.message)}else if(String(id)===String(demo.profile?.id)){demo.profile.loyalty_points=Math.max(0,num(demo.profile.loyalty_points)+delta);storageSet(LS.profile,demo.profile)}closeModal();toast('Points mis à jour.');adminCustomers();};
+async function adminPartnerships(){
+  let list=[];
+  if(hasSupabase){const {data,error}=await sb.from('partnership_requests').select('*').order('created_at',{ascending:false}).limit(100);if(error)return toast(error.message);list=data||[]}
+  else list=demo.partnerships;
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Demandes de partenariat</h3><div class="stack">${list.map(r=>`<div class="customer-card"><div class="status-line"><strong>${esc(r.business_name)}</strong><span class="status ${r.status==='accepted'?'delivered':r.status==='rejected'?'cancelled':'pending'}">${({new:'Nouveau',reviewed:'À l’étude',accepted:'Accepté',rejected:'Refusé'})[r.status]||esc(r.status)}</span></div><p><strong>${esc(r.contact_name)}</strong> • ${esc(r.phone)} • ${esc(r.partnership_type)}</p><p>${esc(r.message||'')}</p><div class="order-actions"><button onclick="setPartnershipStatus('${r.id}','reviewed')">À l’étude</button><button class="primary-action" onclick="setPartnershipStatus('${r.id}','accepted')">Accepter</button><button onclick="setPartnershipStatus('${r.id}','rejected')">Refuser</button></div></div>`).join('')||'<div class="empty">Aucune demande de partenariat.</div>'}</div>`);iconRefresh();
+}
+window.setPartnershipStatus=async(id,status)=>{
+  if(hasSupabase){const {error}=await sb.from('partnership_requests').update({status}).eq('id',id);if(error)return toast(error.message)}
+  else{const row=demo.partnerships.find(x=>String(x.id)===String(id));if(row)row.status=status;storageSet(LS.partnerships,demo.partnerships)}
+  toast('Statut mis à jour.');adminPartnerships();
+};
+
 async function adminCustomers(){
   let users=[];
   if(hasSupabase){const{data}=await sb.from('profiles').select('id,display_name,phone,role,loyalty_points,created_at').order('created_at',{ascending:false}).limit(100);users=data||[]}
