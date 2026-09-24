@@ -1,4 +1,4 @@
--- LTD Sandy Shores — Base Supabase V6
+-- LTD Sandy Shores — Base Supabase V7
 -- Compatible avec une installation V1 : ce script ajoute/actualise les colonnes et règles nécessaires.
 -- Supabase > SQL Editor > New query > coller tout ce fichier > Run.
 
@@ -1123,3 +1123,93 @@ language sql stable security definer set search_path=public as $$
   order by case when p.staff_role='patron' then 0 when p.staff_role='copatron' then 1 else 2 end, p.display_name;
 $$;
 grant execute on function public.get_public_staff_contacts() to anon,authenticated;
+
+-- ==========================================================
+-- V7 — SYNCHRONISATION TEMPS RÉEL, ACCUEIL EMPLOYÉS & ANNUAIRE
+-- ==========================================================
+
+-- Tous les rôles employés peuvent par défaut ouvrir / fermer le LTD.
+-- La direction peut ensuite décocher cette permission depuis le site.
+insert into public.role_permissions(staff_role,permission_key,enabled) values
+('vendeur_novice','business_status_manage',true),
+('vendeur_intermediaire','business_status_manage',true),
+('vendeur_experimente','business_status_manage',true),
+('pompiste_novice','business_status_manage',true),
+('pompiste_intermediaire','business_status_manage',true),
+('pompiste_experimente','business_status_manage',true),
+('chef_equipe','business_status_manage',true),
+('livreur','business_status_manage',true),
+('responsable_pompiste','business_status_manage',true),
+('responsable_vente','business_status_manage',true)
+on conflict (staff_role,permission_key) do nothing;
+
+create or replace function public.set_business_status(p_open boolean) returns void
+language plpgsql security definer set search_path=public as $$
+begin
+  if not public.has_permission('business_status_manage') then
+    raise exception 'Vous n’avez pas l’autorisation de modifier le statut du LTD';
+  end if;
+  update public.site_settings set business_open=p_open,updated_at=now() where id='main';
+end; $$;
+grant execute on function public.set_business_status(boolean) to authenticated;
+
+-- Annuaire public : tous les employés sont affichés, mais le numéro reste privé
+-- tant que l'employé n'a pas coché l'autorisation dans son profil.
+create or replace function public.get_public_staff_roster()
+returns table(id uuid,name text,phone text,label text,avatar_url text,bio text,staff_role text,rank_order integer)
+language sql stable security definer set search_path=public as $$
+  select p.id,
+         coalesce(p.display_name,'Employé') as name,
+         case when p.show_phone then coalesce(p.phone,'') else '' end as phone,
+         case p.staff_role
+           when 'patron' then 'Gérant'
+           when 'copatron' then 'Cogérante'
+           when 'responsable_vente' then 'Responsable vente'
+           when 'responsable_pompiste' then 'Responsable pompiste'
+           when 'chef_equipe' then 'Chef d’équipe'
+           when 'vendeur_experimente' then 'Vendeur expérimenté'
+           when 'pompiste_experimente' then 'Pompiste expérimenté'
+           when 'vendeur_intermediaire' then 'Vendeur intermédiaire'
+           when 'pompiste_intermediaire' then 'Pompiste intermédiaire'
+           when 'vendeur_novice' then 'Vendeur novice'
+           when 'pompiste_novice' then 'Pompiste novice'
+           when 'livreur' then 'Livreur'
+           else 'Employé'
+         end as label,
+         coalesce(p.avatar_url,'') as avatar_url,
+         coalesce(p.profile_bio,'') as bio,
+         p.staff_role,
+         case p.staff_role
+           when 'patron' then 10
+           when 'copatron' then 20
+           when 'responsable_vente' then 30
+           when 'responsable_pompiste' then 40
+           when 'chef_equipe' then 50
+           when 'vendeur_experimente' then 60
+           when 'pompiste_experimente' then 70
+           when 'vendeur_intermediaire' then 80
+           when 'pompiste_intermediaire' then 90
+           when 'vendeur_novice' then 100
+           when 'pompiste_novice' then 110
+           when 'livreur' then 120
+           else 999
+         end as rank_order
+  from public.profiles p
+  where p.staff_role is not null
+  order by rank_order,p.display_name;
+$$;
+grant execute on function public.get_public_staff_roster() to anon,authenticated;
+
+-- Active le temps réel sur les tables affichées par plusieurs téléphones/PC.
+do $$
+declare t text;
+begin
+  foreach t in array array['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname='supabase_realtime' and schemaname='public' and tablename=t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I',t);
+    end if;
+  end loop;
+end $$;

@@ -20,7 +20,7 @@
         <div class="brand-copy"><div class="eyebrow">SANDY SHORES</div><h1>Site officiel</h1></div>
       </button>
       <div class="top-actions">
-        <button class="icon-btn staff-access-btn" id="employeeAccessBtn" aria-label="Espace employés" title="Espace employés"><i data-lucide="badge-check"></i></button>
+        <button class="icon-btn staff-access-btn" id="employeeAccessBtn" aria-label="Connexion employés" title="Connexion employés"><i data-lucide="badge-check"></i></button>
         <button class="status-dot-wrap" id="businessStatusButton" aria-label="Statut"><span class="status-dot"></span><span id="businessStatusMini">Ouvert</span></button>
         <button class="icon-btn" id="accountBtn" aria-label="Compte"><i data-lucide="user-round"></i></button>
       </div>
@@ -34,14 +34,34 @@
           <button class="storefront-strip-link" data-nav="news">Voir les nouveautés</button>
         </div>
 
-        <section class="editorial-hero">
+        <section id="staffHomeDashboard" class="staff-home-dashboard hidden">
+          <div class="staff-home-welcome">
+            <div><span class="eyebrow">ESPACE INTERNE</span><h2 id="staffHomeGreeting">Bonjour</h2><p id="staffHomeRole">Membre du LTD Sandy Shores</p></div>
+            <button class="btn ghost" id="staffHomeProfileBtn"><i data-lucide="user-pen"></i> Mon profil</button>
+          </div>
+          <div class="staff-home-status">
+            <div><small>STATUT DU LTD</small><strong id="staffBusinessStatus">Ouvert</strong><span>Visible immédiatement par tous les utilisateurs.</span></div>
+            <button class="business-toggle" id="staffBusinessToggle"><i data-lucide="power"></i><span>Fermer le LTD</span></button>
+          </div>
+          <div class="staff-home-actions">
+            <button id="staffOrdersShortcut"><i data-lucide="package-check"></i><span>Commandes</span></button>
+            <button id="staffAdminShortcut"><i data-lucide="layout-dashboard"></i><span>Administration</span></button>
+            <button id="staffAccountShortcut"><i data-lucide="circle-user-round"></i><span>Mon compte</span></button>
+          </div>
+          <div id="staffHomeOrdersWrap" class="staff-home-orders">
+            <div class="section-heading sub"><div><span class="eyebrow">COMMANDES</span><h3>À traiter</h3></div><button class="btn mini" id="staffHomeRefresh"><i data-lucide="refresh-cw"></i></button></div>
+            <div id="staffHomeOrders" class="stack"></div>
+          </div>
+        </section>
+
+        <section class="editorial-hero client-home-section">
           <div class="editorial-hero-noise"></div>
           <div class="editorial-hero-topline">
             <span class="editorial-location"><i data-lucide="map-pin"></i> Sandy Shores</span>
             <span class="editorial-status pill" id="heroStatus">OUVERT</span>
           </div>
           <div class="editorial-hero-copy">
-            <span class="editorial-kicker">LTD • CONVENIENCE STORE</span>
+            <span class="editorial-kicker">LTD SANDY SHORES</span>
             <h2>Le commerce<br>du Nord.</h2>
             <p>Produits du quotidien, packs, nouveautés et services pour particuliers comme professionnels.</p>
           </div>
@@ -52,7 +72,7 @@
           <div class="editorial-hero-wordmark">SANDY</div>
         </section>
 
-        <section class="utility-panel">
+        <section class="utility-panel client-home-section">
           <button class="utility-tile utility-tile-wide" data-nav="shop">
             <span class="utility-icon"><i data-lucide="shopping-bag"></i></span>
             <span class="utility-copy"><small>ACHETER</small><strong>Catalogue</strong></span>
@@ -75,14 +95,9 @@
             <span class="utility-copy"><small>ACHATS</small><strong>Mon panier</strong></span>
             <b class="utility-badge" id="homeCartCount">0</b>
           </button>
-          <button class="utility-tile utility-tile-wide" id="homeEmployeeAccess">
-            <span class="utility-icon"><i data-lucide="badge-check"></i></span>
-            <span class="utility-copy"><small>ACCÈS INTERNE</small><strong>Espace employés</strong></span>
-            <i class="utility-arrow" data-lucide="chevron-right"></i>
-          </button>
         </section>
 
-        <section class="editorial-section editorial-section-first">
+        <section class="editorial-section editorial-section-first client-home-section">
           <div class="editorial-heading">
             <div><span class="editorial-index">01</span><div><small>SÉLECTION DU LTD</small><h3>Produits du mois</h3></div></div>
             <button class="editorial-link" data-nav="shop">Tout voir <i data-lucide="arrow-right"></i></button>
@@ -90,7 +105,7 @@
           <div id="homeMonthProducts" class="home-product-row editorial-products"></div>
         </section>
 
-        <section class="feature-banner feature-banner-packs">
+        <section class="feature-banner feature-banner-packs client-home-section">
           <div class="feature-banner-copy">
             <small>NOS OFFRES</small>
             <h3>Les packs du LTD</h3>
@@ -100,15 +115,15 @@
           <div class="feature-banner-mark">PACKS</div>
         </section>
 
-        <section class="editorial-section">
+        <section class="editorial-section client-home-section">
           <div class="editorial-heading">
-            <div><span class="editorial-index">02</span><div><small>JUSTE ARRIVÉ</small><h3>Nouvelles arrivées</h3></div></div>
+            <div><span class="editorial-index">02</span><div><small>À L’HONNEUR</small><h3>Produit du mois</h3></div></div>
             <button class="editorial-link" id="homeNewProductsLink">Tout voir <i data-lucide="arrow-right"></i></button>
           </div>
           <div id="homeNewProducts" class="home-product-row editorial-products"></div>
         </section>
 
-        <section class="home-service-rail">
+        <section class="home-service-rail client-home-section">
           <button data-nav="partner" class="home-service-card home-service-card-dark">
             <span class="home-service-number">01</span>
             <i data-lucide="handshake"></i>
@@ -131,7 +146,7 @@
           <div id="homeAnnouncements" class="stack editorial-news"></div>
         </section>
 
-        <section class="store-info-panel">
+        <section class="store-info-panel client-home-section">
           <div class="store-info-title">
             <small>INFORMATIONS</small>
             <h3>LTD Sandy Shores</h3>
@@ -145,6 +160,15 @@
           <button class="store-info-contact" data-nav="contact"><span>Contacter le LTD</span><i data-lucide="arrow-right"></i></button>
         </section>
 
+
+        <section class="editorial-section home-team-section">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">04</span><div><small>NOTRE ÉQUIPE</small><h3>Employés du LTD</h3></div></div>
+          </div>
+          <p class="home-team-intro">Du poste le plus gradé au moins gradé.</p>
+          <div id="homeStaffRoster" class="home-staff-roster"></div>
+        </section>
+
         <footer class="home-footer">
           <div class="home-footer-brand"><span>LTD</span><strong>SANDY SHORES</strong></div>
           <div class="home-footer-links">
@@ -152,7 +176,7 @@
             <button data-nav="orders">Suivi</button>
             <button data-nav="recruitment">Recrutement</button>
             <button data-nav="contact">Contact</button>
-            <button id="employeeFooterBtn">Espace employés</button>
+            <button id="employeeFooterBtn">Connexion employés</button>
           </div>
           <p>Votre commerce de proximité à Sandy Shores.</p>
         </footer>
@@ -228,29 +252,19 @@
         </section>
       </section>
 
-      <section class="view" id="staffView">
-        <div class="section-heading"><div><span class="eyebrow">ESPACE EMPLOYÉS</span><h2>Équipe LTD</h2></div><button class="btn mini" id="refreshStaff"><i data-lucide="refresh-cw"></i></button></div>
-        <div id="staffProfileCard" class="staff-profile-card"></div>
-        <div class="staff-kpis" id="staffKpis"></div>
-        <div class="staff-tabs"><button class="staff-tab active" data-filter="active">À traiter</button><button class="staff-tab" data-filter="mine">Mes commandes</button><button class="staff-tab" data-filter="all">Historique</button></div>
-        <div id="staffOrders" class="stack"></div>
-      </section>
-
       <section class="view" id="adminView">
         <div class="section-heading"><div><span class="eyebrow">GESTION LTD</span><h2>Administration</h2></div><button class="btn mini" id="refreshAdmin"><i data-lucide="refresh-cw"></i></button></div>
         <div id="adminStats" class="admin-stats"></div>
         <div class="admin-grid">
           <button class="admin-card" data-admin="announcements" data-perm="announcements_manage"><i data-lucide="megaphone"></i><span>Annonces</span></button>
-          <button class="admin-card" data-admin="product" data-perm="catalog_manage"><i data-lucide="package-plus"></i><span>Produit</span></button>
           <button class="admin-card" data-admin="products" data-perm="catalog_manage"><i data-lucide="packages"></i><span>Catalogue</span></button>
           <button class="admin-card" data-admin="packs" data-perm="packs_manage"><i data-lucide="package-open"></i><span>Packs</span></button>
           <button class="admin-card" data-admin="promotion" data-perm="promotions_manage"><i data-lucide="badge-percent"></i><span>Promotions</span></button>
           <button class="admin-card" data-admin="recruitment" data-perm="recruitment_manage"><i data-lucide="badge-user"></i><span>Recrutement</span></button>
           <button class="admin-card" data-admin="contacts" data-perm="contacts_manage"><i data-lucide="contact-round"></i><span>Contacts</span></button>
           <button class="admin-card" data-admin="settings" data-perm="settings_manage"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
-          <button class="admin-card" data-admin="team" data-perm="team_manage"><i data-lucide="users-round"></i><span>Équipe & comptes</span></button>
+          <button class="admin-card direction-only" data-admin="accounts"><i data-lucide="users-round"></i><span>Comptes</span></button>
           <button class="admin-card direction-only" data-admin="permissions"><i data-lucide="list-checks"></i><span>Permissions</span></button>
-          <button class="admin-card" data-admin="customers" data-perm="customers_manage"><i data-lucide="user-round-search"></i><span>Clients</span></button>
           <button class="admin-card" data-admin="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>
@@ -264,7 +278,6 @@
       <button class="nav-item" id="bottomCartButton"><i data-lucide="shopping-cart"></i><span>Panier</span><b class="nav-cart-badge" id="bottomCartCount">0</b></button>
       <button class="nav-item" data-nav="orders"><i data-lucide="map-pinned"></i><span>Suivi</span></button>
       <button class="nav-item" data-nav="contact"><i data-lucide="phone"></i><span>Contact</span></button>
-      <button class="nav-item hidden" id="staffNav" data-nav="staff"><i data-lucide="clipboard-check"></i><span>Équipe</span></button>
     </nav>
   </div>
 

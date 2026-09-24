@@ -167,6 +167,118 @@ async function resetStaffPassword(req: Request, body: Record<string, unknown>) {
   return { ok: true }
 }
 
+
+async function listAccounts(req: Request) {
+  await requireDirection(req)
+  const users: any[] = []
+  let page = 1
+  const perPage = 1000
+  while (true) {
+    const listed = await admin.auth.admin.listUsers({ page, perPage })
+    if (listed.error) throw listed.error
+    const batch = listed.data?.users ?? []
+    users.push(...batch)
+    if (batch.length < perPage) break
+    page += 1
+  }
+
+  const { data: profiles, error: profilesError } = await admin.from('profiles').select('*')
+  if (profilesError) throw profilesError
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]))
+  const missing = users.filter(u => !profileMap.has(u.id))
+  if (missing.length) {
+    const rows = missing.map(u => ({
+      id: u.id,
+      display_name: String(u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'Client'),
+      email: u.email ?? null,
+      phone: String(u.user_metadata?.phone ?? ''),
+      role: 'customer',
+      staff_username: u.user_metadata?.staff_username ?? null,
+    }))
+    const synced = await admin.from('profiles').upsert(rows, { onConflict: 'id' }).select('*')
+    if (synced.error) throw synced.error
+    for (const row of synced.data ?? []) profileMap.set(row.id, row)
+  }
+
+  const accounts = users.map(u => {
+    const p: any = profileMap.get(u.id) ?? {}
+    return {
+      id: u.id,
+      email: u.email ?? p.email ?? '',
+      display_name: p.display_name ?? u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'Sans nom',
+      phone: p.phone ?? u.user_metadata?.phone ?? '',
+      role: p.role ?? 'customer',
+      staff_role: p.staff_role ?? null,
+      staff_username: p.staff_username ?? u.user_metadata?.staff_username ?? null,
+      avatar_url: p.avatar_url ?? '',
+      show_phone: Boolean(p.show_phone),
+      profile_bio: p.profile_bio ?? '',
+      must_change_password: Boolean(p.must_change_password),
+      loyalty_points: Number(p.loyalty_points ?? 0),
+      created_at: p.created_at ?? u.created_at ?? null,
+      is_staff: Boolean(p.staff_role),
+    }
+  })
+  accounts.sort((a, b) => {
+    const rank = (x: any) => x.staff_role === 'patron' ? 0 : x.staff_role === 'copatron' ? 1 : x.staff_role ? 2 : 3
+    return rank(a) - rank(b) || String(a.display_name).localeCompare(String(b.display_name), 'fr')
+  })
+  return { ok: true, accounts }
+}
+
+async function updateAccount(req: Request, body: Record<string, unknown>) {
+  await requireDirection(req)
+  const userId = String(body.user_id ?? '')
+  if (!userId) throw new Error('Compte introuvable.')
+  const displayName = String(body.display_name ?? '').trim()
+  const phone = String(body.phone ?? '').trim()
+  if (!displayName) throw new Error('Nom obligatoire.')
+
+  const { data: current, error: currentError } = await admin.from('profiles').select('*').eq('id', userId).single()
+  if (currentError || !current) throw new Error('Profil introuvable.')
+
+  const patch: Record<string, unknown> = { display_name: displayName, phone }
+  if (current.staff_role) {
+    const isDirectionTarget = ['patron','copatron'].includes(current.staff_role)
+    const requestedRole = String(body.staff_role ?? current.staff_role)
+    if (!isDirectionTarget) {
+      if (!EMPLOYEE_ROLES.has(requestedRole)) throw new Error('Rôle employé invalide.')
+      patch.staff_role = requestedRole
+      patch.role = 'employee'
+    } else {
+      patch.staff_role = current.staff_role
+      patch.role = 'admin'
+    }
+    patch.show_phone = Boolean(body.show_phone)
+  }
+
+  const updated = await admin.from('profiles').update(patch).eq('id', userId)
+  if (updated.error) throw updated.error
+  const authUpdated = await admin.auth.admin.updateUserById(userId, {
+    user_metadata: {
+      ...(current.staff_username ? { staff_username: current.staff_username } : {}),
+      display_name: displayName,
+      phone,
+    },
+  })
+  if (authUpdated.error) throw authUpdated.error
+  return { ok: true }
+}
+
+async function deleteAccount(req: Request, body: Record<string, unknown>) {
+  await requireDirection(req)
+  const userId = String(body.user_id ?? '')
+  if (!userId) throw new Error('Compte introuvable.')
+  const { data: current, error } = await admin.from('profiles').select('id,staff_role').eq('id', userId).single()
+  if (error || !current) throw new Error('Compte introuvable.')
+  if (['patron','copatron'].includes(current.staff_role)) throw new Error('Les comptes de direction ne peuvent pas être supprimés depuis le site.')
+  const orders = await admin.from('orders').delete().eq('user_id', userId)
+  if (orders.error) throw orders.error
+  const removed = await admin.auth.admin.deleteUser(userId)
+  if (removed.error) throw removed.error
+  return { ok: true }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Méthode non autorisée.' }, 405)
@@ -178,6 +290,9 @@ Deno.serve(async (req) => {
     }
     if (action === 'create_staff') return json(await createStaff(req, body))
     if (action === 'reset_staff_password') return json(await resetStaffPassword(req, body))
+    if (action === 'list_accounts') return json(await listAccounts(req))
+    if (action === 'update_account') return json(await updateAccount(req, body))
+    if (action === 'delete_account') return json(await deleteAccount(req, body))
     return json({ error: 'Action inconnue.' }, 400)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erreur serveur.'
