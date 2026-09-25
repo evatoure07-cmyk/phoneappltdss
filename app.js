@@ -274,9 +274,43 @@ function nav(name){
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
+
+// V8.2 — routeur de boutons robuste (compatible navigateur mobile / NUI / cache Render).
+// Les boutons essentiels n'utilisent plus de onclick inline : un seul listener global les gère.
+document.addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-ltd-action]');
+  if(!btn)return;
+  e.preventDefault();
+  const action=btn.dataset.ltdAction;
+  try{
+    if(action==='create-staff'){
+      if(!isDirection())return toast('Accès réservé à la direction.');
+      if(typeof window.showCreateStaffAccount!=='function')throw new Error('Le formulaire de création de compte n’est pas chargé. Rechargez la page.');
+      return window.showCreateStaffAccount();
+    }
+    if(action==='change-password'){
+      if(!demo.profile)return toast('Connectez-vous d’abord à votre compte.');
+      if(typeof window.showPasswordChange!=='function')throw new Error('Le changement de mot de passe n’est pas chargé. Rechargez la page.');
+      return window.showPasswordChange(false);
+    }
+    if(action==='role-preview'){
+      if(typeof window.showRolePreviewPicker!=='function')throw new Error('Le mode Voir comme n’est pas chargé. Rechargez la page.');
+      return window.showRolePreviewPicker();
+    }
+    if(action==='refresh-employees'){
+      btn.disabled=true;
+      await renderEmployeesList();
+      btn.disabled=false;
+      return;
+    }
+  }catch(err){
+    btn.disabled=false;
+    console.error('[LTD action]',action,err);
+    toast(err?.message||'Cette action n’a pas pu être ouverte.');
+  }
+});
 $('#employeeListSearch')?.addEventListener('input',renderEmployeeListRows);
 $('#refreshEmployees')?.addEventListener('click',renderEmployeesList);
-$('#employeeListCreateBtn')?.addEventListener('click',()=>window.showCreateStaffAccount?.());
 
 function applySettingsToUI(){
   const open=Boolean(settings.business_open);
@@ -656,6 +690,8 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
+window.LTD_BUILD='8.2.0';
+console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
   if(a.length<8)return toast('Le mot de passe doit contenir au moins 8 caractères.');
@@ -680,7 +716,7 @@ function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Emplo
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
   const identity=isStaff()&&demo.profile.staff_username?`<span>@${esc(demo.profile.staff_username)}</span>`:'';
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showPasswordChange(false)"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}${canUseRolePreview()?`<button class="btn ghost" onclick="showRolePreviewPicker()"><i data-lucide="scan-eye"></i> Voir comme…</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}${canUseRolePreview()?`<button class="btn ghost" type="button" data-ltd-action="role-preview"><i data-lucide="scan-eye"></i> Voir comme…</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
 }
 window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
 async function uploadAvatar(file){

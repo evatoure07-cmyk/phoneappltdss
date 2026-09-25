@@ -261,7 +261,10 @@
         <div class="search-wrap"><i data-lucide="search"></i><input id="employeeListSearch" placeholder="Rechercher un nom, identifiant ou rôle…"></div>
         <div id="employeeListStatus" class="subtle" style="margin:10px 0"></div>
         <div id="employeeList" class="stack"></div>
-        <button class="btn primary full" id="employeeListCreateBtn" style="margin-top:14px"><i data-lucide="user-round-plus"></i> Créer un compte employé</button>
+        <div class="employee-list-actions" style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:14px">
+          <button class="btn primary full" id="employeeListCreateBtn" data-ltd-action="create-staff"><i data-lucide="user-round-plus"></i> Créer un compte employé</button>
+          <button class="btn ghost" id="employeeListRefreshBtn" data-ltd-action="refresh-employees" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
+        </div>
       </section>
 
       <section class="view" id="adminView">
@@ -278,7 +281,7 @@
           <button class="admin-card direction-only" data-nav="employees"><i data-lucide="contact-round"></i><span>Liste employés</span></button>
           <button class="admin-card direction-only" data-admin="accounts"><i data-lucide="users-round"></i><span>Comptes</span></button>
           <button class="admin-card direction-only" data-admin="permissions"><i data-lucide="list-checks"></i><span>Permissions</span></button>
-          <button class="admin-card" id="rolePreviewAdminCard" onclick="showRolePreviewPicker()"><i data-lucide="scan-eye"></i><span>Voir comme…</span></button>
+          <button class="admin-card" id="rolePreviewAdminCard" data-ltd-action="role-preview"><i data-lucide="scan-eye"></i><span>Voir comme…</span></button>
           <button class="admin-card" data-admin="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>
@@ -298,7 +301,7 @@
   <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modalContent"></div></div>
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=8.2.0"></script>
+  <script src="app.js?v=8.2.0"></script>
 </body>
 </html>
