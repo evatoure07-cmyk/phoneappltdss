@@ -347,7 +347,7 @@ async function renderHome(){
   const month=products.filter(p=>p.popular && p.available!==false && !p.is_pack).slice(0,4);
   const monthFallback=month.length?month:products.filter(p=>p.available!==false && !p.is_pack).slice(0,4);
   $('#homeMonthProducts').innerHTML=monthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les produits du mois seront bientôt annoncés.</div>';
-  const featuredMonth=products.filter(p=>(p.is_new||p.popular) && p.available!==false && !p.is_pack).slice(0,4);
+  const featuredMonth=products.filter(p=>p.is_product_of_month && p.available!==false && !p.is_pack).slice(0,1);
   const featuredMonthFallback=featuredMonth.length?featuredMonth:products.filter(p=>p.available!==false && !p.is_pack).slice(0,1);
   $('#homeNewProducts').innerHTML=featuredMonthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Le produit du mois sera bientôt annoncé.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
@@ -806,7 +806,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-admin]');if(!a)return;
   const perm=a.dataset.perm;if(perm&&!uiCan(perm))return toast('Ce rôle n’a pas cet accès.');
   if(isPreviewMode())return toast('Mode aperçu : les outils sont visibles mais les modifications sont désactivées.');
-  ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,accounts:adminAccounts,team:adminAccounts,permissions:adminPermissions,customers:adminAccounts,partnerships:adminPartnerships})[a.dataset.admin]?.();
+  ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,productmonth:adminProductOfMonth,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,accounts:adminAccounts,team:adminAccounts,permissions:adminPermissions,customers:adminAccounts,partnerships:adminPartnerships})[a.dataset.admin]?.();
 });
 async function adminAnnouncements(){
   const list=await getAnnouncements(true);demo.announcements=list;
@@ -815,9 +815,47 @@ async function adminAnnouncements(){
 function adminAnnouncement(){openModal(`<button class="icon-btn close" onclick="adminAnnouncements()">×</button><h3>Publier une annonce</h3><div class="form-group"><label>Titre</label><input id="annTitle" placeholder="Titre de l’annonce"></div><div class="form-group"><label>Sous-titre / texte</label><textarea id="annBody" placeholder="Texte affiché sous le titre"></textarea></div><div class="form-group"><label>Type</label><select id="annType"><option value="news">Actualité</option><option value="recruitment">Recrutement</option><option value="promotion">Promotion</option><option value="alert">Information importante</option></select></div><label class="checkbox-row"><input type="checkbox" id="annFeatured"> Mettre à la une / Nouveau</label><div class="modal-actions"><button class="btn primary" onclick="saveAnnouncement()">Publier</button></div>`)}
 window.saveAnnouncement=async()=>{const x={title:$('#annTitle').value.trim(),body:$('#annBody').value.trim(),type:$('#annType').value,featured:$('#annFeatured').checked,active:true};if(!x.title||!x.body)return toast('Titre et sous-titre obligatoires.');if(hasSupabase){const{error}=await sb.from('announcements').insert(x);if(error)return toast(error.message)}else{demo.announcements.unshift({...x,id:uid('ann'),created_at:new Date().toISOString()});storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce publiée.');adminAnnouncements();};
 window.deleteAnnouncement=async id=>{if(!confirm('Supprimer cette annonce ?'))return;if(hasSupabase){const{error}=await sb.from('announcements').delete().eq('id',id);if(error)return toast(error.message)}else{demo.announcements=demo.announcements.filter(a=>String(a.id)!==String(id));storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce supprimée.');adminAnnouncements();};
-function adminProduct(product=null){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${product?'Modifier':'Ajouter'} un produit</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="prodName" value="${esc(product?.name||'')}"></div><div class="form-group"><label>Prix</label><input id="prodPrice" type="number" min="0" step="0.01" value="${num(product?.price)}"></div></div><div class="form-group"><label>Description</label><input id="prodDesc" value="${esc(product?.description||'')}"></div><div class="form-grid"><div class="form-group"><label>Catégorie</label><input id="prodCat" value="${esc(product?.category||'Divers')}"></div><div class="form-group"><label>Emoji / icône</label><input id="prodEmoji" value="${esc(product?.emoji||'🛒')}"></div></div><div class="form-group"><label>Stock (laisser vide = illimité)</label><input id="prodStock" type="number" min="0" value="${product?.stock??''}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="prodPopular" ${product?.popular?'checked':''}> Populaire</label><label class="checkbox-row"><input type="checkbox" id="prodNew" ${product?.is_new?'checked':''}> Nouveauté</label></div><label class="checkbox-row"><input type="checkbox" id="prodAvailable" ${product?.available!==false?'checked':''}> Disponible à la vente</label><div class="modal-actions"><button class="btn primary" onclick="saveProduct('${product?.id||''}')">Enregistrer</button></div>`)}
-window.saveProduct=async id=>{const rawStock=$('#prodStock').value.trim();const x={name:$('#prodName').value.trim(),description:$('#prodDesc').value.trim(),price:num($('#prodPrice').value),category:$('#prodCat').value.trim()||'Divers',emoji:$('#prodEmoji').value.trim()||'🛒',stock:rawStock===''?null:Math.max(0,Math.floor(num(rawStock))),popular:$('#prodPopular').checked,is_new:$('#prodNew').checked,available:$('#prodAvailable').checked,active:true};if(!x.name)return toast('Nom obligatoire.');if(hasSupabase){const q=id?sb.from('products').update(x).eq('id',id):sb.from('products').insert(x);const{error}=await q;if(error)return toast(error.message)}else{if(id){const i=demo.products.findIndex(p=>String(p.id)===String(id));if(i>=0)demo.products[i]={...demo.products[i],...x}}else demo.products.push({...x,id:uid('p')});storageSet(LS.products,demo.products)}closeModal();renderShop();toast('Produit enregistré.')};
-async function adminProducts(){const list=await getProducts(true);demo.products=list;openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Catalogue</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'🛒')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)} • ${esc(p.category)} • ${p.available!==false?'Disponible':'Indisponible'}${p.stock!==null&&p.stock!==undefined?` • Stock ${p.stock}`:''}</p></div><div class="catalog-actions"><button onclick="editAdminProduct('${p.id}')"><i data-lucide="pencil"></i></button><button onclick="toggleProduct('${p.id}',${p.available!==false})"><i data-lucide="${p.available!==false?'eye-off':'eye'}"></i></button></div></div>`).join('')||'<div class="empty">Aucun produit.</div>'}</div><button class="btn primary full" style="margin-top:13px" onclick="adminProduct()"><i data-lucide="package-plus"></i> Ajouter un produit</button>`);iconRefresh()}
+function adminProduct(product=null){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${product?'Modifier':'Ajouter'} un produit</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="prodName" value="${esc(product?.name||'')}"></div><div class="form-group"><label>Prix</label><input id="prodPrice" type="number" min="0" step="0.01" value="${num(product?.price)}"></div></div><div class="form-group"><label>Description</label><input id="prodDesc" value="${esc(product?.description||'')}"></div><div class="form-grid"><div class="form-group"><label>Catégorie</label><input id="prodCat" value="${esc(product?.category||'Divers')}"></div><div class="form-group"><label>Emoji / icône</label><input id="prodEmoji" value="${esc(product?.emoji||'🛒')}"></div></div><div class="form-group"><label>Stock (laisser vide = illimité)</label><input id="prodStock" type="number" min="0" value="${product?.stock??''}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="prodPopular" ${product?.popular?'checked':''}> Populaire</label><label class="checkbox-row"><input type="checkbox" id="prodNew" ${product?.is_new?'checked':''}> Nouveauté</label></div><label class="checkbox-row"><input type="checkbox" id="prodMonth" ${product?.is_product_of_month?'checked':''}> Produit du mois</label><label class="checkbox-row"><input type="checkbox" id="prodAvailable" ${product?.available!==false?'checked':''}> Disponible à la vente</label><div class="modal-actions"><button class="btn primary" onclick="saveProduct('${product?.id||''}')">Enregistrer</button></div>`)}
+window.saveProduct=async id=>{
+  const rawStock=$('#prodStock').value.trim();
+  const x={name:$('#prodName').value.trim(),description:$('#prodDesc').value.trim(),price:num($('#prodPrice').value),category:$('#prodCat').value.trim()||'Divers',emoji:$('#prodEmoji').value.trim()||'🛒',stock:rawStock===''?null:Math.max(0,Math.floor(num(rawStock))),popular:$('#prodPopular').checked,is_new:$('#prodNew').checked,is_product_of_month:$('#prodMonth').checked,available:$('#prodAvailable').checked,active:true};
+  if(!x.name)return toast('Nom obligatoire.');
+  if(hasSupabase){
+    if(x.is_product_of_month){
+      const{error:clearError}=await sb.from('products').update({is_product_of_month:false}).eq('is_pack',false);
+      if(clearError)return toast(clearError.message);
+    }
+    const q=id?sb.from('products').update(x).eq('id',id):sb.from('products').insert(x);
+    const{error}=await q;if(error)return toast(error.message);
+  }else{
+    if(x.is_product_of_month)demo.products.forEach(p=>{if(!p.is_pack)p.is_product_of_month=false});
+    if(id){const i=demo.products.findIndex(p=>String(p.id)===String(id));if(i>=0)demo.products[i]={...demo.products[i],...x}}else demo.products.push({...x,id:uid('p')});
+    storageSet(LS.products,demo.products);
+  }
+  closeModal();await renderHome();renderShop();toast('Produit enregistré.');
+};
+async function adminProducts(){const list=await getProducts(true);demo.products=list;openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Catalogue</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'🛒')}</div><div><strong>${esc(p.name)}${p.is_product_of_month?' • ⭐ PRODUIT DU MOIS':''}</strong><p>${money(p.price)} • ${esc(p.category)} • ${p.available!==false?'Disponible':'Indisponible'}${p.stock!==null&&p.stock!==undefined?` • Stock ${p.stock}`:''}</p></div><div class="catalog-actions"><button onclick="editAdminProduct('${p.id}')"><i data-lucide="pencil"></i></button><button onclick="toggleProduct('${p.id}',${p.available!==false})"><i data-lucide="${p.available!==false?'eye-off':'eye'}"></i></button></div></div>`).join('')||'<div class="empty">Aucun produit.</div>'}</div><button class="btn primary full" style="margin-top:13px" onclick="adminProduct()"><i data-lucide="package-plus"></i> Ajouter un produit</button>`);iconRefresh()}
+async function adminProductOfMonth(){
+  const list=(await getProducts(true)).filter(p=>!p.is_pack&&p.active!==false);
+  demo.products=await getProducts(true);
+  const current=list.find(p=>p.is_product_of_month);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">MISE EN AVANT</span><h3>Produit du mois</h3><p class="page-intro">Choisissez le produit qui apparaîtra dans la section Produit du mois sur l’accueil.</p><div class="form-group"><label>Produit sélectionné</label><select id="monthProductSelect"><option value="">Aucun produit du mois</option>${list.map(p=>`<option value="${p.id}" ${current&&String(current.id)===String(p.id)?'selected':''}>${esc(p.name)} — ${money(p.price)}</option>`).join('')}</select></div>${current?`<div class="notice"><div><strong>Actuellement : ${esc(current.name)}</strong><span>${money(current.price)} • ${esc(current.category)}</span></div></div>`:''}<div class="modal-actions"><button class="btn primary" onclick="saveProductOfMonth()">Enregistrer</button></div>`);
+  iconRefresh();
+}
+window.saveProductOfMonth=async()=>{
+  const id=$('#monthProductSelect')?.value||'';
+  if(hasSupabase){
+    const{error:clearError}=await sb.from('products').update({is_product_of_month:false}).eq('is_pack',false);
+    if(clearError)return toast(clearError.message);
+    if(id){const{error}=await sb.from('products').update({is_product_of_month:true}).eq('id',id);if(error)return toast(error.message)}
+  }else{
+    demo.products.forEach(p=>{if(!p.is_pack)p.is_product_of_month=String(p.id)===String(id)});
+    storageSet(LS.products,demo.products);
+  }
+  toast(id?'Produit du mois modifié.':'Produit du mois retiré.');
+  await renderHome();
+  adminProductOfMonth();
+};
 window.editAdminProduct=id=>{const p=demo.products.find(x=>String(x.id)===String(id));if(p)adminProduct(p)};
 window.toggleProduct=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('products').update({available:!current}).eq('id',id);if(error)return toast(error.message)}else{const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.available=!current;storageSet(LS.products,demo.products)}adminProducts();};
 async function adminPacks(){
