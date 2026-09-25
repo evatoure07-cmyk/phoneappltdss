@@ -659,18 +659,36 @@ window.confirmCancel=async id=>{
 window.showStaffOrder=async id=>{closeModal();showOrderDetail(id)};
 
 function showAuth(mode='login'){
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${mode==='login'?'Connexion':'Créer un compte'}</h3>${mode==='signup'?`<div class="form-group"><label>Prénom & nom</label><input id="authName" placeholder="Prénom Nom"></div><div class="form-group"><label>Téléphone</label><input id="authPhone" placeholder="Votre numéro"></div>`:''}<div class="form-group"><label>Email</label><input id="authEmail" type="email" placeholder="vous@exemple.com"></div><div class="form-group"><label>Mot de passe</label><input id="authPass" type="password" placeholder="••••••••"></div><div class="modal-actions"><button class="btn ghost" onclick="showAuth('${mode==='login'?'signup':'login'}')">${mode==='login'?'Créer un compte':'J’ai déjà un compte'}</button><button class="btn primary" onclick="submitAuth('${mode}')">${mode==='login'?'Se connecter':'Créer'}</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${mode==='login'?'Connexion':'Créer un compte'}</h3>${mode==='signup'?`<div class="form-group"><label>Prénom & nom</label><input id="authName" placeholder="Prénom Nom"></div><div class="form-group"><label>Téléphone</label><input id="authPhone" placeholder="Votre numéro"></div>`:''}<div class="form-group"><label>${mode==='login'?'Email ou identifiant employé':'Email'}</label><input id="authEmail" ${mode==='signup'?'type="email"':'type="text"'} autocomplete="username" placeholder="${mode==='login'?'email@exemple.com ou prenom.nom':'vous@exemple.com'}"></div><div class="form-group"><label>Mot de passe</label><input id="authPass" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="••••••••"></div>${mode==='login'?'<p class="subtle" style="margin-top:-4px">Employés : vous pouvez vous connecter ici directement avec votre identifiant prénom.nom.</p>':''}<div class="modal-actions"><button class="btn ghost" onclick="showAuth('${mode==='login'?'signup':'login'}')">${mode==='login'?'Créer un compte':'J’ai déjà un compte'}</button><button class="btn primary" onclick="submitAuth('${mode}')">${mode==='login'?'Se connecter':'Créer'}</button></div>`);
 }
 window.showAuth=showAuth;
 window.submitAuth=async mode=>{
-  const email=($('#authEmail')?.value||'').trim(),pass=$('#authPass')?.value||'';if(!email||!pass)return toast('Complétez les champs.');
+  const rawLogin=($('#authEmail')?.value||'').trim(),pass=$('#authPass')?.value||'';if(!rawLogin||!pass)return toast('Complétez les champs.');
   if(hasSupabase){
     if(mode==='signup'){
+      const email=rawLogin.toLowerCase();
       const name=($('#authName')?.value||'').trim()||'Client',phone=($('#authPhone')?.value||'').trim();
       const {error}=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name,phone}}});if(error)return toast(error.message);toast('Compte créé. Vérifiez votre email si demandé.');closeModal();await initAuth();
-    }else{const{error}=await sb.auth.signInWithPassword({email,password:pass});if(error)return toast(error.message);closeModal();await initAuth();toast('Connexion réussie.');}
+    }else{
+      const isEmail=rawLogin.includes('@');
+      const normalizedUsername=isEmail?'':normalizeStaffUsername(rawLogin);
+      const email=isEmail?rawLogin.toLowerCase():staffEmail(normalizedUsername);
+      let {error}=await sb.auth.signInWithPassword({email,password:pass});
+      if(error && !isEmail && DIRECTION_USERNAMES.has(normalizedUsername)){
+        try{
+          await invokeAdminUsers({action:'bootstrap_direction',username:normalizedUsername,password:pass});
+          ({error}=await sb.auth.signInWithPassword({email,password:pass}));
+        }catch(bootErr){
+          // Si le compte direction est déjà activé, afficher l'erreur de connexion normale.
+          const msg=String(bootErr?.message||'').toLowerCase();
+          if(!msg.includes('déjà')&&!msg.includes('already')&&!msg.includes('utilisé')&&!msg.includes('used')) return toast(bootErr.message||'Connexion impossible.');
+        }
+      }
+      if(error)return toast(error.message==='Invalid login credentials'?'Identifiant/email ou mot de passe incorrect.':error.message);
+      closeModal();await initAuth();toast('Connexion réussie.');
+    }
   }else{
-    requireCentralDatabase('la création de compte');
+    requireCentralDatabase(mode==='signup'?'la création de compte':'la connexion');
   }
 };
 function showEmployeeAccess(){
