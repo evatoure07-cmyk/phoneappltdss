@@ -429,11 +429,11 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');i
 
 async function renderShop(){
   await getSettings(); const [all,promos]=await Promise.all([getProducts(),getPromotions()]); demo.products=all;
-  const cats=['Tous','Populaires','Nouveautés',...new Set(all.map(p=>p.category).filter(Boolean))];
+  const cats=['Tous','Populaires','Nouveauté'];
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   const q=($('#productSearch').value||'').trim().toLowerCase();
   const list=all.filter(p=>{
-    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveautés'&&p.is_new)||p.category===activeCategory;
+    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new)||p.category===activeCategory;
     const text=`${p.name} ${p.description||''} ${p.category||''}`.toLowerCase(); return cat&&text.includes(q);
   });
   $('#productGrid').innerHTML=list.map(productHTML).join('')||'<div class="empty" style="grid-column:1/-1">Aucun article ne correspond à votre recherche.</div>';
@@ -465,7 +465,7 @@ $('#cartButton')?.addEventListener('click',showCart);
 $('#packsCartButton')?.addEventListener('click',showCart);
 $('#homeCartShortcut')?.addEventListener('click',showCart);
 $('#bottomCartButton')?.addEventListener('click',showCart);
-$('#homeNewProductsLink')?.addEventListener('click',()=>{activeCategory='Nouveautés';nav('shop')});
+$('#homeNewProductsLink')?.addEventListener('click',()=>{activeCategory='Nouveauté';nav('shop')});
 
 function cartSubtotal(){return demo.cart.reduce((a,b)=>a+num(b.price)*num(b.qty),0)}
 function activeAutoPromo(){return demo.promotions?.find(p=>p.active!==false&&p.auto_apply&&promotionTimeValid(p))||null}
