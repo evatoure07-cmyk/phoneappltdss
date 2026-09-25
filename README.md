@@ -1,90 +1,66 @@
-# LTD Sandy Shores — V7
+# LTD Sandy Shores — V8
 
-Cette V7 simplifie la gestion du LTD et corrige la synchronisation multi-utilisateurs.
+Cette V8 corrige la création des comptes et ajoute le mode **Voir comme…**.
 
-## Ce qui change
+## Correction importante : comptes réellement enregistrés
 
-- un seul panel **Administration > Comptes** pour voir tous les comptes clients et employés ;
-- la liste des comptes est récupérée depuis **Supabase Auth**, puis synchronisée avec `profiles` : un compte créé ne doit plus disparaître du panel ;
-- filtres **Tous / Employés / Clients** + recherche ;
-- modification du nom, téléphone et rôle des employés ;
-- réinitialisation du mot de passe des employés ;
-- lien de réinitialisation par email pour les clients ;
-- suppression d’un compte non-direction depuis le panel ;
-- création d’un employé avec seulement **Prénom + Nom** : l’identifiant `prenom.nom` est créé automatiquement ;
-- suppression de l’ancienne page **Espace équipe** ;
-- accueil différent pour les employés : statut ouvert/fermé, commandes et accès rapides ;
-- bouton **Ouvrir / Fermer le LTD** directement sur l’accueil employé (permission configurable par rôle) ;
-- catalogue admin simplifié : le bouton **Ajouter un produit** est directement dans **Catalogue** ;
-- annuaire des employés sur l’accueil, trié du poste le plus gradé au moins gradé ;
-- le numéro d’un employé reste privé tant qu’il n’a pas activé l’option dans son profil ;
-- la section « Nouvelles arrivées » est remplacée par **Produit du mois** ;
-- suppression de la mention « Convenience Store » ;
-- synchronisation temps réel des commandes, produits, annonces, statut ouvert/fermé, recrutement, contacts, profils et promotions entre les téléphones/PC.
+La V7 pouvait basculer silencieusement en mode local lorsque `SUPABASE_URL` et `SUPABASE_ANON_KEY` n'étaient pas renseignés dans `config.js`. Un compte semblait alors créé sur un appareil sans exister dans la base commune.
 
-## Direction
+En V8 :
 
-- **Blake Mars** — Gérant — `blake.mars`
-- **Luciana Angel Mars** — Cogérante — `luciana.angelmars`
+- la création de comptes clients et employés exige la base centrale Supabase ;
+- si Supabase n'est pas configuré, le site affiche clairement **Base centrale non connectée** et bloque la création de comptes locaux ;
+- après la création d'un employé, le site demande immédiatement à la fonction serveur de relire ce compte dans Supabase ;
+- le message **Compte enregistré** n'apparaît que si le compte existe réellement dans Supabase Auth + `profiles` ;
+- le bouton **Voir dans Comptes** recharge immédiatement le panel centralisé ;
+- les erreurs de la fonction `admin-users` sont maintenant affichées de manière plus précise.
 
-Ils ont exactement les mêmes accès complets.
+Tous les comptes restent centralisés dans **Administration > Comptes**.
 
-Après le reset V7, les mots de passe temporaires sont :
+## Mode « Voir comme… »
 
-- `blake.mars` → `Blake#4R8m2Mars!`
-- `luciana.angelmars` → `Luci#7M2q9Mars!`
+Disponible uniquement pour :
 
-À la première connexion, le site oblige à les remplacer.
+- Gérant (`patron`) ;
+- Cogérante (`copatron`) ;
+- Responsable pompiste ;
+- Responsable vente.
 
-## Installation / mise à jour
+Le bouton est disponible dans **Mon compte** et dans **Administration**.
 
-1. Remplace les fichiers GitHub par ceux de cette V7.
-2. Dans **Supabase > SQL Editor**, exécute entièrement `supabase.sql`.
-3. Déploie à nouveau la fonction `admin-users` avec le fichier `supabase/functions/admin-users/index.ts`.
-4. La fonction `admin-users` doit garder **Verify JWT désactivé** : les actions sensibles contrôlent elles-mêmes la session et le rôle de direction.
-5. Redéploie le site Render.
+Vues disponibles : Client, Vendeur novice/intermédiaire/expérimenté, Pompiste novice/intermédiaire/expérimenté, Chef d'équipe, Livreur, Responsable pompiste et Responsable vente.
 
-### Reset des anciens comptes demandé pour cette V7
+Le mode aperçu :
 
-Tu as demandé de supprimer les comptes de test existants et de repartir uniquement avec Luciana et Blake.
+- change l'accueil et les outils affichés selon le rôle choisi ;
+- respecte les permissions configurées pour le rôle ;
+- n'altère jamais le vrai compte ni le vrai rôle ;
+- bloque toutes les modifications pendant l'aperçu ;
+- affiche une bannière persistante **Aperçu : …** avec un bouton pour revenir à la vue réelle ;
+- n'affiche pas l'historique réel du compte direction dans la vue Client.
 
-Après avoir exécuté `supabase.sql`, exécute **UNE SEULE FOIS** `RESET_COMPTES_V7.sql` dans **Supabase > SQL Editor**.
+## Mise à jour V7 → V8
 
-Ce reset :
+1. Remplace `index.html`, `styles.css` et `app.js` par ceux de la V8.
+2. **Si ton `config.js` contient déjà ton URL Supabase et ta clé anon, garde ton fichier actuel. Ne le remplace pas par le `config.js` vierge du ZIP.**
+3. Dans **Supabase > SQL Editor**, exécute le nouveau `supabase.sql` (il ajoute notamment `get_preview_role_permissions`).
+4. Redéploie la fonction **admin-users** avec `supabase/functions/admin-users/index.ts`.
+5. Garde **Verify JWT désactivé** pour `admin-users` comme dans la V7 ; la fonction vérifie elle-même la session et le rôle de direction.
+6. Redéploie Render.
 
-- supprime tous les anciens comptes Auth et profils ;
-- supprime l’historique de commandes lié aux anciens comptes pour éviter les conflits de clés étrangères ;
-- conserve produits, packs, annonces, paramètres, promotions et partenariats ;
-- réarme les accès `luciana.angelmars` et `blake.mars`.
+## Vérification de la base centrale
 
-Ensuite, connecte-toi une première fois avec l’un des deux identifiants direction ci-dessus. Le site recréera automatiquement le compte nominatif correspondant.
+Dans `config.js`, ces deux valeurs doivent être renseignées :
 
-## Création d’un employé
+```js
+SUPABASE_URL: "https://TON-PROJET.supabase.co",
+SUPABASE_ANON_KEY: "TA_CLE_ANON",
+```
 
-Dans **Administration > Comptes > Créer un compte employé** :
+La clé `service_role` ne doit **jamais** être mise dans `config.js`. Elle reste uniquement dans les variables secrètes de la fonction Supabase `admin-users`.
 
-1. renseigne Prénom ;
-2. renseigne Nom ;
-3. renseigne le téléphone ;
-4. choisis le rôle ;
-5. garde ou change le mot de passe temporaire proposé.
+Si les deux valeurs ci-dessus sont vides, la V8 affiche un avertissement et empêche volontairement la création de comptes afin d'éviter de faux comptes enregistrés uniquement dans un navigateur.
 
-L’identifiant est automatiquement calculé en `prenom.nom`. Il n’y a plus de champ identifiant à remplir manuellement.
+## Test rapide après déploiement
 
-Rôles disponibles : Vendeur novice, Vendeur intermédiaire, Vendeur expérimenté, Pompiste novice, Pompiste intermédiaire, Pompiste expérimenté, Chef d’équipe, Livreur, Responsable pompiste et Responsable vente.
-
-Les droits restent configurables dans **Administration > Permissions**.
-
-## Clients
-
-Les habitants créent eux-mêmes leur compte avec leur email et leur propre mot de passe. Ils apparaissent ensuite dans **Administration > Comptes > Clients**.
-
-La direction peut modifier leurs informations visibles, gérer leur fidélité et envoyer un lien de récupération de mot de passe. Le mot de passe actuel d’un client n’est jamais affiché.
-
-Pour les liens de récupération, ajoute l’URL Render du site dans **Supabase > Authentication > URL Configuration > Redirect URLs**.
-
-## Important pour plusieurs utilisateurs en même temps
-
-La V7 utilise Supabase comme source centrale et ajoute les tables principales à Supabase Realtime. Une modification faite sur un téléphone/PC (statut du LTD, commande, produit, annonce, profil, etc.) déclenche un rafraîchissement chez les autres utilisateurs connectés.
-
-Ne mets jamais la clé `service_role` dans `config.js`. Elle doit rester uniquement dans l’environnement sécurisé de la fonction Supabase `admin-users`.
+Connecte-toi avec Blake ou Luciana, ouvre **Administration > Comptes**, crée un compte test avec Prénom + Nom + rôle. Le site doit afficher **Enregistré dans Supabase**, puis le compte doit apparaître immédiatement lorsque tu cliques **Voir dans Comptes**. En ouvrant le site depuis un autre appareil avec le même Supabase, ce compte sera également visible dans la liste.

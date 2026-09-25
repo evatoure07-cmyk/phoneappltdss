@@ -26,6 +26,9 @@
       </div>
     </header>
 
+    <div id="databaseWarning" class="database-warning hidden"><i data-lucide="cloud-off"></i><div><strong>Base centrale non connectée</strong><span>Les comptes et données partagées sont désactivés tant que Supabase n’est pas configuré.</span></div></div>
+    <div id="rolePreviewBanner" class="role-preview-banner hidden"><div><i data-lucide="scan-eye"></i><strong id="rolePreviewLabel">Aperçu</strong></div><button onclick="exitRolePreview()">Quitter l’aperçu</button></div>
+
     <main>
       <section class="view active" id="homeView">
         <div class="storefront-strip">
@@ -252,6 +255,15 @@
         </section>
       </section>
 
+      <section class="view" id="employeesView">
+        <div class="section-heading"><div><span class="eyebrow">ÉQUIPE LTD</span><h2>Liste des employés</h2></div><button class="btn mini" id="refreshEmployees"><i data-lucide="refresh-cw"></i></button></div>
+        <p class="page-intro">Tous les comptes employés réellement enregistrés dans la base commune apparaissent ici.</p>
+        <div class="search-wrap"><i data-lucide="search"></i><input id="employeeListSearch" placeholder="Rechercher un nom, identifiant ou rôle…"></div>
+        <div id="employeeListStatus" class="subtle" style="margin:10px 0"></div>
+        <div id="employeeList" class="stack"></div>
+        <button class="btn primary full" id="employeeListCreateBtn" style="margin-top:14px"><i data-lucide="user-round-plus"></i> Créer un compte employé</button>
+      </section>
+
       <section class="view" id="adminView">
         <div class="section-heading"><div><span class="eyebrow">GESTION LTD</span><h2>Administration</h2></div><button class="btn mini" id="refreshAdmin"><i data-lucide="refresh-cw"></i></button></div>
         <div id="adminStats" class="admin-stats"></div>
@@ -263,8 +275,10 @@
           <button class="admin-card" data-admin="recruitment" data-perm="recruitment_manage"><i data-lucide="badge-user"></i><span>Recrutement</span></button>
           <button class="admin-card" data-admin="contacts" data-perm="contacts_manage"><i data-lucide="contact-round"></i><span>Contacts</span></button>
           <button class="admin-card" data-admin="settings" data-perm="settings_manage"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
+          <button class="admin-card direction-only" data-nav="employees"><i data-lucide="contact-round"></i><span>Liste employés</span></button>
           <button class="admin-card direction-only" data-admin="accounts"><i data-lucide="users-round"></i><span>Comptes</span></button>
           <button class="admin-card direction-only" data-admin="permissions"><i data-lucide="list-checks"></i><span>Permissions</span></button>
+          <button class="admin-card" id="rolePreviewAdminCard" onclick="showRolePreviewPicker()"><i data-lucide="scan-eye"></i><span>Voir comme…</span></button>
           <button class="admin-card" data-admin="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>

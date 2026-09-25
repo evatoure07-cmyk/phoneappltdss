@@ -226,6 +226,40 @@ async function listAccounts(req: Request) {
   return { ok: true, accounts }
 }
 
+
+async function getAccount(req: Request, body: Record<string, unknown>) {
+  await requireDirection(req)
+  const userId = String(body.user_id ?? '')
+  if (!userId) throw new Error('Compte introuvable.')
+
+  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId)
+  if (authError || !authUser?.user) throw authError ?? new Error('Compte Auth introuvable.')
+
+  const { data: p, error: profileError } = await admin.from('profiles').select('*').eq('id', userId).single()
+  if (profileError || !p) throw profileError ?? new Error('Profil introuvable.')
+
+  const u = authUser.user
+  return {
+    ok: true,
+    account: {
+      id: u.id,
+      email: u.email ?? p.email ?? '',
+      display_name: p.display_name ?? u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'Sans nom',
+      phone: p.phone ?? u.user_metadata?.phone ?? '',
+      role: p.role ?? 'customer',
+      staff_role: p.staff_role ?? null,
+      staff_username: p.staff_username ?? u.user_metadata?.staff_username ?? null,
+      avatar_url: p.avatar_url ?? '',
+      show_phone: Boolean(p.show_phone),
+      profile_bio: p.profile_bio ?? '',
+      must_change_password: Boolean(p.must_change_password),
+      loyalty_points: Number(p.loyalty_points ?? 0),
+      created_at: p.created_at ?? u.created_at ?? null,
+      is_staff: Boolean(p.staff_role),
+    },
+  }
+}
+
 async function updateAccount(req: Request, body: Record<string, unknown>) {
   await requireDirection(req)
   const userId = String(body.user_id ?? '')
@@ -291,6 +325,7 @@ Deno.serve(async (req) => {
     if (action === 'create_staff') return json(await createStaff(req, body))
     if (action === 'reset_staff_password') return json(await resetStaffPassword(req, body))
     if (action === 'list_accounts') return json(await listAccounts(req))
+    if (action === 'get_account') return json(await getAccount(req, body))
     if (action === 'update_account') return json(await updateAccount(req, body))
     if (action === 'delete_account') return json(await deleteAccount(req, body))
     return json({ error: 'Action inconnue.' }, 400)

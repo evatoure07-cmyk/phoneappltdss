@@ -1,5 +1,6 @@
 const C = window.LTD_CONFIG || {};
 const hasSupabase = Boolean(C.SUPABASE_URL && C.SUPABASE_ANON_KEY);
+const requireSharedDb = C.REQUIRE_SHARED_DATABASE !== false;
 const sb = hasSupabase ? window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
 
 const LS = {
@@ -96,6 +97,28 @@ const isStaff = () => Boolean(detailedRole()) || ['employee','manager','admin'].
 const isDirection = () => ['patron','copatron'].includes(detailedRole()) || ['manager','admin'].includes(demo.profile?.role);
 const can = permission => isDirection() || myPermissions.has(permission);
 const canManageAnything = () => isDirection() || [...MANAGEMENT_PERMS].some(p=>myPermissions.has(p));
+
+// Mode "Voir comme" : aperçu visuel uniquement. Il ne change jamais le vrai compte ni les droits serveur.
+const PREVIEW_ROLES_ALLOWED = new Set(['patron','copatron','responsable_pompiste','responsable_vente']);
+let previewRole = null;
+let previewPermissions = new Set();
+const canUseRolePreview = () => PREVIEW_ROLES_ALLOWED.has(detailedRole());
+const isPreviewMode = () => Boolean(previewRole);
+const uiIsStaff = () => isPreviewMode() ? previewRole !== 'customer' : isStaff();
+const uiDetailedRole = () => isPreviewMode() ? (previewRole === 'customer' ? null : previewRole) : detailedRole();
+const uiCan = permission => {
+  if(!isPreviewMode()) return can(permission);
+  if(previewRole === 'customer') return false;
+  if(['patron','copatron'].includes(previewRole)) return true;
+  return previewPermissions.has(permission);
+};
+const uiCanManageAnything = () => {
+  if(!isPreviewMode()) return canManageAnything();
+  if(previewRole === 'customer') return false;
+  if(['patron','copatron'].includes(previewRole)) return true;
+  return [...MANAGEMENT_PERMS].some(p=>previewPermissions.has(p));
+};
+const blockPreviewMutation = () => { if(isPreviewMode()){ toast('Mode aperçu : quittez "Voir comme" pour effectuer cette action.'); return true; } return false; };
 const iconRefresh = () => window.lucide && lucide.createIcons();
 
 const STAFF_EMAIL_DOMAIN = 'ltd-sandy-shores.example';
@@ -112,14 +135,30 @@ function randomTempPassword(){
   return 'LTD!' + [...bytes].map(x=>alphabet[x%alphabet.length]).join('');
 }
 async function invokeAdminUsers(body){
-  if(!hasSupabase) throw new Error('Cette action nécessite Supabase.');
+  if(!hasSupabase) throw new Error('La base centrale Supabase n’est pas configurée dans config.js.');
   const {data,error}=await sb.functions.invoke('admin-users',{body});
   if(error){
-    const detail=error?.context?.body || error.message;
-    throw new Error(typeof detail==='string'?detail:'Fonction de gestion des comptes indisponible. Vérifiez son déploiement dans Supabase.');
+    let detail='';
+    try{
+      if(error?.context && typeof error.context.json==='function'){
+        const payload=await error.context.clone().json();
+        detail=payload?.error||payload?.message||'';
+      }
+    }catch{}
+    if(!detail) detail=error?.message||'';
+    throw new Error(detail||'Fonction de gestion des comptes indisponible. Vérifiez le déploiement de admin-users dans Supabase.');
   }
   if(data?.error) throw new Error(data.error);
   return data;
+}
+
+function requireCentralDatabase(action='cette action'){
+  if(hasSupabase)return true;
+  const message=`Impossible d’utiliser ${action} : le site n’est pas connecté à la base centrale Supabase.`;
+  if(requireSharedDb){
+    openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">BASE CENTRALE REQUISE</span><h3>Connexion Supabase manquante</h3><p class="page-intro">${esc(message)}</p><div class="notice warning"><i data-lucide="cloud-off"></i><div><strong>Les comptes locaux ont été désactivés.</strong><span>Renseignez SUPABASE_URL et SUPABASE_ANON_KEY dans config.js pour que les comptes soient enregistrés et visibles par tout le monde.</span></div></div>`);iconRefresh();
+  }else toast(message);
+  return false;
 }
 
 
@@ -227,13 +266,17 @@ async function getJobs(includeInactive=false){
 }
 
 function nav(name){
-  if(name==='admin'&&!canManageAnything())return toast('Votre rôle n’a pas accès à l’administration.');
+  if(name==='admin'&&!uiCanManageAnything())return toast('Ce rôle n’a pas accès à l’administration.');
+  if(name==='employees'&&!isDirection())return toast('La liste des employés est réservée à la direction.');
   $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();window.scrollTo({top:0,behavior:'smooth'});
+  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
+$('#employeeListSearch')?.addEventListener('input',renderEmployeeListRows);
+$('#refreshEmployees')?.addEventListener('click',renderEmployeesList);
+$('#employeeListCreateBtn')?.addEventListener('click',()=>window.showCreateStaffAccount?.());
 
 function applySettingsToUI(){
   const open=Boolean(settings.business_open);
@@ -266,9 +309,10 @@ async function renderHome(){
   if($('#contactsList')) $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
   const roster=await getPublicStaffRoster();
   if($('#homeStaffRoster')) $('#homeStaffRoster').innerHTML=roster.map(staffRosterHTML).join('')||'<div class="empty">L’équipe sera bientôt affichée ici.</div>';
-  document.body.classList.toggle('staff-mode',isStaff());
-  $('#staffHomeDashboard')?.classList.toggle('hidden',!isStaff());
-  if(isStaff()) await renderStaffHome();
+  document.body.classList.toggle('staff-mode',uiIsStaff());
+  $('#staffHomeDashboard')?.classList.toggle('hidden',!uiIsStaff());
+  updatePreviewBanner();
+  if(uiIsStaff()) await renderStaffHome();
   updateCartCount();
   iconRefresh();
 }
@@ -454,6 +498,9 @@ window.checkout=async()=>{
 };
 
 async function renderOrders(){
+  if(isPreviewMode() && previewRole==='customer'){
+    $('#ordersList').innerHTML=`<div class="empty"><strong>Aperçu client</strong><br><br>Un client connecté retrouvera ici ses commandes et leur suivi. Aucune donnée réelle de votre compte direction n’est affichée pendant l’aperçu.</div>`;return;
+  }
   if(!demo.profile){$('#ordersList').innerHTML=`<div class="empty">Connectez-vous pour retrouver vos commandes.<br><br><button class="btn primary" onclick="showAuth('login')">Se connecter</button></div>`;return}
   let orders=[];
   if(hasSupabase){const {data}=await sb.from('orders').select('*,order_items(*)').eq('user_id',demo.profile.id).order('created_at',{ascending:false});orders=data||[]}
@@ -496,6 +543,7 @@ window.reorderOrder=async id=>{
 };
 
 function staffActions(o){
+  if(isPreviewMode()) return `<div class="order-actions"><button disabled>Aperçu uniquement</button><button onclick="showStaffOrder('${o.id}')">Détails</button></div>`;
   const mine=String(o.assigned_to||'')===String(demo.profile?.id||'');
   if(['delivered','cancelled'].includes(o.status))return '';
   if(!o.assigned_to){
@@ -508,21 +556,22 @@ function staffActions(o){
   return `<div class="order-actions">${next&&can('orders_manage')?`<button class="primary-action" onclick="setOrderStatus('${o.id}','${next}')">${next==='accepted'?'Confirmer':next==='preparing'?'Commencer la préparation':next==='ready'?'Marquer prête':next==='out_for_delivery'?'Départ livraison':'Terminer la commande'}</button>`:''}<button onclick="showStaffOrder('${o.id}')">Détails</button>${can('orders_manage')?`<button onclick="cancelOrderPrompt('${o.id}')">Annuler</button>`:''}</div>`;
 }
 async function renderStaffHome(){
-  if(!isStaff() || !$('#staffHomeDashboard'))return;
-  $('#staffHomeGreeting').textContent=`Bonjour ${String(demo.profile?.display_name||'').split(' ')[0]||''}`.trim();
-  $('#staffHomeRole').textContent=roleLabel(detailedRole()||demo.profile?.role||'employee');
+  if(!uiIsStaff() || !$('#staffHomeDashboard'))return;
+  const preview=isPreviewMode();
+  $('#staffHomeGreeting').textContent=preview?'Aperçu de l’espace employé':`Bonjour ${String(demo.profile?.display_name||'').split(' ')[0]||''}`.trim();
+  $('#staffHomeRole').textContent=roleLabel(uiDetailedRole()||demo.profile?.role||'employee') + (preview?' • aperçu':'');
   const open=Boolean(settings.business_open);
   $('#staffBusinessStatus').textContent=open?'Ouvert':'Fermé';
   const toggle=$('#staffBusinessToggle');
   if(toggle){
     toggle.classList.toggle('closed',!open);
-    toggle.disabled=!can('business_status_manage');
+    toggle.disabled=preview||!uiCan('business_status_manage');
     toggle.innerHTML=`<i data-lucide="power"></i><span>${open?'Fermer le LTD':'Ouvrir le LTD'}</span>`;
-    toggle.title=can('business_status_manage')?'Changer le statut du LTD':'Votre rôle n’a pas cette permission';
+    toggle.title=preview?'Mode aperçu : modification désactivée':(uiCan('business_status_manage')?'Changer le statut du LTD':'Ce rôle n’a pas cette permission');
   }
-  $('#staffAdminShortcut')?.classList.toggle('hidden',!canManageAnything());
-  $('#staffHomeOrdersWrap')?.classList.toggle('hidden',!can('orders_view'));
-  if(can('orders_view')){
+  $('#staffAdminShortcut')?.classList.toggle('hidden',!uiCanManageAnything());
+  $('#staffHomeOrdersWrap')?.classList.toggle('hidden',!uiCan('orders_view'));
+  if(uiCan('orders_view')){
     let orders=[];
     if(hasSupabase){const{data,error}=await sb.from('orders').select('*').not('status','in','(delivered,cancelled)').order('created_at',{ascending:false}).limit(25);if(!error)orders=data||[]}
     else orders=demo.orders.filter(o=>!['delivered','cancelled'].includes(o.status));
@@ -531,6 +580,7 @@ async function renderStaffHome(){
   iconRefresh();
 }
 window.toggleBusinessStatus=async()=>{
+  if(blockPreviewMutation())return;
   if(!isStaff())return showEmployeeAccess();
   if(!can('business_status_manage'))return toast('Votre rôle n’a pas l’autorisation de changer le statut.');
   const next=!Boolean(settings.business_open);
@@ -542,11 +592,13 @@ window.toggleBusinessStatus=async()=>{
 };
 
 window.claimOrder=async id=>{
+  if(blockPreviewMutation())return;
   if(hasSupabase){const{error}=await sb.rpc('claim_order',{p_order_id:id});if(error)return toast(error.message||'Commande déjà prise.');}
   else{const o=demo.orders.find(x=>String(x.id)===String(id));if(!o)return;if(o.assigned_to&&String(o.assigned_to)!==String(demo.profile.id))return toast('Cette commande est déjà prise.');o.assigned_to=demo.profile.id;o.assigned_name=demo.profile.display_name;o.assigned_at=new Date().toISOString();if(o.status==='pending')o.status='accepted';o.events=o.events||[];o.events.push({status:o.status,actor_name:demo.profile.display_name||'Employé',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}
   toast('Commande attribuée.');renderStaffHome();
 };
 window.setOrderStatus=async(id,status)=>{
+  if(blockPreviewMutation())return;
   if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:status,p_reason:null});if(error)return toast(error.message||'Modification impossible.');}
   else{
     const o=demo.orders.find(x=>String(x.id)===String(id));if(!o)return;o.status=status;o.events=o.events||[];o.events.push({status,actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});
@@ -555,7 +607,8 @@ window.setOrderStatus=async(id,status)=>{
   toast(`Commande : ${statusLabel(status)}`);renderStaffHome();
 };
 window.cancelOrderPrompt=id=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Annuler la commande</h3><div class="form-group"><label>Motif</label><textarea id="cancelReason" placeholder="Ex : article indisponible, zone inaccessible…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Retour</button><button class="btn primary" onclick="confirmCancel('${id}')">Confirmer</button></div>`);
-window.confirmCancel=async id=>{const reason=($('#cancelReason')?.value||'').trim();if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});if(error)return toast(error.message)}else{const o=demo.orders.find(x=>String(x.id)===String(id));if(o){o.status='cancelled';o.cancelled_reason=reason;o.events=o.events||[];o.events.push({status:'cancelled',actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}}closeModal();toast('Commande annulée.');renderStaffHome()};
+window.confirmCancel=async id=>{
+  if(blockPreviewMutation())return;const reason=($('#cancelReason')?.value||'').trim();if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});if(error)return toast(error.message)}else{const o=demo.orders.find(x=>String(x.id)===String(id));if(o){o.status='cancelled';o.cancelled_reason=reason;o.events=o.events||[];o.events.push({status:'cancelled',actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}}closeModal();toast('Commande annulée.');renderStaffHome()};
 window.showStaffOrder=async id=>{closeModal();showOrderDetail(id)};
 
 function showAuth(mode='login'){
@@ -570,7 +623,7 @@ window.submitAuth=async mode=>{
       const {error}=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name,phone}}});if(error)return toast(error.message);toast('Compte créé. Vérifiez votre email si demandé.');closeModal();await initAuth();
     }else{const{error}=await sb.auth.signInWithPassword({email,password:pass});if(error)return toast(error.message);closeModal();await initAuth();toast('Connexion réussie.');}
   }else{
-    demo.user={id:'demo-user',email};demo.profile={id:'demo-user',display_name:($('#authName')?.value||email.split('@')[0]),phone:($('#authPhone')?.value||''),favorite_address:'',role:'customer',loyalty_points:0};storageSet(LS.profile,demo.profile);closeModal();await initAuth();toast('Compte créé.');
+    requireCentralDatabase('la création de compte');
   }
 };
 function showEmployeeAccess(){
@@ -590,9 +643,8 @@ window.submitEmployeeAuth=async()=>{
       }
       if(error)throw error;
     }else{
-      const isLuci=username==='luciana.angelmars',isBlake=username==='blake.mars';
-      demo.user={id:'demo-staff',email:staffEmail(username)};
-      demo.profile={id:'demo-staff',display_name:isLuci?'Luciana Angel Mars':isBlake?'Blake Mars':username,staff_username:username,phone:'',favorite_address:'',role:(isLuci||isBlake)?'admin':'employee',staff_role:isLuci?'copatron':isBlake?'patron':'livreur',loyalty_points:0,must_change_password:false};storageSet(LS.profile,demo.profile);
+      requireCentralDatabase('la connexion employé');
+      return;
     }
     closeModal(true);await initAuth();isStaff()?nav('home'):toast('Ce compte ne possède pas d’accès employé.');
   }catch(err){toast(err.message==='Invalid login credentials'?'Identifiant ou mot de passe incorrect.':(err.message||'Connexion impossible.'));}
@@ -628,7 +680,7 @@ function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Emplo
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
   const identity=isStaff()&&demo.profile.staff_username?`<span>@${esc(demo.profile.staff_username)}</span>`:'';
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showPasswordChange(false)"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" onclick="showPasswordChange(false)"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}${canUseRolePreview()?`<button class="btn ghost" onclick="showRolePreviewPicker()"><i data-lucide="scan-eye"></i> Voir comme…</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
 }
 window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
 async function uploadAvatar(file){
@@ -684,25 +736,27 @@ $('#partnerForm')?.addEventListener('submit',async e=>{
 });
 
 async function renderAdmin(){
-  if(!canManageAnything()){ $('#adminStats').innerHTML='';$('#adminActivity').innerHTML='<div class="empty">Votre rôle ne possède aucun accès d’administration.</div>';return }
-  $$('#adminView [data-perm]').forEach(card=>card.classList.toggle('hidden-by-permission',!can(card.dataset.perm)));
-  $$('#adminView .direction-only').forEach(card=>card.classList.toggle('hidden-by-permission',!isDirection()));
+  if(!uiCanManageAnything()){ $('#adminStats').innerHTML='';$('#adminActivity').innerHTML='<div class="empty">Ce rôle ne possède aucun accès d’administration.</div>';return }
+  $$('#adminView [data-perm]').forEach(card=>card.classList.toggle('hidden-by-permission',!uiCan(card.dataset.perm)));
+  $$('#adminView .direction-only').forEach(card=>card.classList.toggle('hidden-by-permission',isPreviewMode() || !isDirection()));
+  $('#rolePreviewAdminCard')?.classList.toggle('hidden-by-permission',isPreviewMode() || !canUseRolePreview());
   let orders=[];
-  if(can('stats_view')||isDirection()){
+  if(uiCan('stats_view')||(!isPreviewMode()&&isDirection())){
     if(hasSupabase){const{data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);orders=data||[]}else orders=demo.orders;
   }
   const delivered=orders.filter(o=>o.status==='delivered'),active=orders.filter(o=>!['delivered','cancelled'].includes(o.status));
   const revenue=delivered.reduce((a,o)=>a+num(o.total),0),fees=delivered.reduce((a,o)=>a+num(o.delivery_fee),0),avg=delivered.length?revenue/delivered.length:0;
   const customers=new Map(),products=new Map();for(const o of delivered){const key=o.customer_name||'Client';customers.set(key,(customers.get(key)||0)+num(o.total));for(const i of (o.order_items||o.items||[])){const name=i.product_name||i.name||'Article';products.set(name,(products.get(name)||0)+num(i.quantity||i.qty));}}
   const topCustomer=[...customers.entries()].sort((a,b)=>b[1]-a[1])[0],topProduct=[...products.entries()].sort((a,b)=>b[1]-a[1])[0];
-  $('#adminStats').innerHTML=(can('stats_view')||isDirection())?`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`:'';
-  $('#adminActivity').innerHTML=(can('stats_view')||isDirection())?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>${orders.slice(0,6).map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune activité.</div>'}`:'<div class="empty">Les outils autorisés pour votre rôle sont disponibles au-dessus.</div>';
+  $('#adminStats').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`:'';
+  $('#adminActivity').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>${orders.slice(0,6).map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune activité.</div>'}`:'<div class="empty">Les outils autorisés pour votre rôle sont disponibles au-dessus.</div>';
   iconRefresh();
 }
 $('#refreshAdmin').addEventListener('click',renderAdmin);
 document.addEventListener('click',e=>{
   const a=e.target.closest('[data-admin]');if(!a)return;
-  const perm=a.dataset.perm;if(perm&&!can(perm))return toast('Votre rôle n’a pas cet accès.');
+  const perm=a.dataset.perm;if(perm&&!uiCan(perm))return toast('Ce rôle n’a pas cet accès.');
+  if(isPreviewMode())return toast('Mode aperçu : les outils sont visibles mais les modifications sont désactivées.');
   ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,accounts:adminAccounts,team:adminAccounts,permissions:adminPermissions,customers:adminAccounts,partnerships:adminPartnerships})[a.dataset.admin]?.();
 });
 async function adminAnnouncements(){
@@ -752,6 +806,41 @@ window.saveContact=async id=>{const x={label:$('#contactLabel').value.trim(),nam
 function adminSettings(){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Paramètres</h3><label class="checkbox-row"><input type="checkbox" id="setOpen" ${settings.business_open?'checked':''}> Commandes ouvertes</label><div class="form-grid"><div class="form-group"><label>Frais livraison</label><input id="setFee" type="number" min="0" value="${num(settings.delivery_fee)}"></div><div class="form-group"><label>Minimum commande</label><input id="setMin" type="number" min="0" value="${num(settings.min_order)}"></div></div><div class="form-grid"><div class="form-group"><label>Délai min (min)</label><input id="setEtaMin" type="number" min="0" value="${num(settings.delivery_eta_min)}"></div><div class="form-group"><label>Délai max (min)</label><input id="setEtaMax" type="number" min="0" value="${num(settings.delivery_eta_max)}"></div></div><div class="form-grid"><div class="form-group"><label>Points / commande</label><input id="setPoints" type="number" min="0" value="${num(settings.points_per_order)}"></div><div class="form-group"><label>Seuil récompense</label><input id="setReward" type="number" min="1" value="${num(settings.loyalty_reward_points)}"></div></div><div class="form-group"><label>Adresse</label><input id="setAddress" value="${esc(settings.address)}"></div><div class="form-group"><label>Téléphone du LTD</label><input id="setPhone" value="${esc(settings.phone)}"></div><div class="form-group"><label>Horaires / information d’ouverture</label><input id="setHours" value="${esc(settings.hours_text)}"></div><div class="form-group"><label>Jour de recrutement</label><input id="setRecruit" value="${esc(settings.recruitment_day)}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="setDelivery" ${settings.delivery_enabled?'checked':''}> Livraison</label><label class="checkbox-row"><input type="checkbox" id="setPickup" ${settings.pickup_enabled?'checked':''}> Retrait LTD</label></div><div class="modal-actions"><button class="btn primary" onclick="saveSettings()">Enregistrer</button></div>`)}
 window.saveSettings=async()=>{const x={business_open:$('#setOpen').checked,delivery_fee:num($('#setFee').value),min_order:num($('#setMin').value),delivery_eta_min:num($('#setEtaMin').value),delivery_eta_max:num($('#setEtaMax').value),points_per_order:num($('#setPoints').value),loyalty_reward_points:num($('#setReward').value),address:$('#setAddress').value.trim(),phone:$('#setPhone').value.trim(),hours_text:$('#setHours').value.trim(),recruitment_day:$('#setRecruit').value.trim(),delivery_enabled:$('#setDelivery').checked,pickup_enabled:$('#setPickup').checked};if(hasSupabase){const{error}=await sb.from('site_settings').update(x).eq('id','main');if(error)return toast(error.message)}else{Object.assign(settings,x);storageSet(LS.settings,settings)}Object.assign(settings,x);closeModal();applySettingsToUI();toast('Paramètres enregistrés.')};
 let adminAccountsCache=[];
+let employeeListCache=[];
+async function renderEmployeesList(){
+  if(!isDirection())return toast('Accès réservé à la direction.');
+  const target=$('#employeeList'),status=$('#employeeListStatus');
+  if(target)target.innerHTML='<div class="empty">Chargement des employés…</div>';
+  if(status)status.textContent='Synchronisation avec Supabase…';
+  try{
+    if(!requireCentralDatabase('la liste des employés'))return;
+    const result=await invokeAdminUsers({action:'list_staff'});
+    employeeListCache=result.employees||[];
+    adminAccountsCache=[...employeeListCache,...adminAccountsCache.filter(x=>!x.staff_role)];
+    renderEmployeeListRows();
+    if(status)status.textContent=`${employeeListCache.length} compte${employeeListCache.length>1?'s':''} employé${employeeListCache.length>1?'s':''} enregistré${employeeListCache.length>1?'s':''}`;
+  }catch(err){
+    if(target)target.innerHTML=`<div class="empty">${esc(err.message||'Impossible de charger les employés.')}</div>`;
+    if(status)status.textContent='';
+  }
+  iconRefresh();
+}
+function renderEmployeeListRows(){
+  const target=$('#employeeList');if(!target)return;
+  const q=($('#employeeListSearch')?.value||'').trim().toLowerCase();
+  const rows=employeeListCache.filter(u=>!q||[u.display_name,u.staff_username,u.phone,roleLabel(u.staff_role)].some(v=>String(v||'').toLowerCase().includes(q)));
+  target.innerHTML=rows.map(u=>{
+    const direction=['patron','copatron'].includes(u.staff_role);
+    const avatar=u.avatar_url?`<img src="${esc(u.avatar_url)}" alt="">`:'<i data-lucide="user-round"></i>';
+    return `<div class="catalog-row account-row"><div class="catalog-icon">${avatar}</div><div><strong>${esc(u.display_name||'Sans nom')}</strong><p>${esc(roleLabel(u.staff_role))} • @${esc(u.staff_username||'identifiant-manquant')}${u.phone?` • ${esc(u.phone)}`:''}${u.must_change_password?' • mot de passe temporaire':''}</p></div><div class="catalog-actions"><button onclick="editManagedAccount('${u.id}')" title="Modifier"><i data-lucide="pencil"></i></button><button onclick="resetStaffPasswordPrompt('${u.id}','${esc(u.staff_username||'')}')" title="Réinitialiser le mot de passe"><i data-lucide="key-round"></i></button>${!direction?`<button onclick="deleteEmployeeFromList('${u.id}')" title="Supprimer"><i data-lucide="trash-2"></i></button>`:''}</div></div>`;
+  }).join('')||'<div class="empty">Aucun employé trouvé.</div>';
+  iconRefresh();
+}
+window.deleteEmployeeFromList=async id=>{
+  const u=employeeListCache.find(x=>String(x.id)===String(id));if(!u)return;
+  if(!confirm(`Supprimer définitivement le compte de ${u.display_name||'cet employé'} ?`))return;
+  try{await invokeAdminUsers({action:'delete_account',user_id:id});toast('Compte supprimé.');await renderEmployeesList();}catch(err){toast(err.message||'Suppression impossible.');}
+};
 async function adminAccounts(initialFilter='all'){
   if(!isDirection())return toast('Accès réservé à la direction.');
   try{
@@ -793,7 +882,7 @@ function accountPanelCard(u){
 window.editManagedAccount=id=>{
   const u=adminAccountsCache.find(x=>String(x.id)===String(id));if(!u)return;
   const staff=Boolean(u.staff_role||u.is_staff),direction=['patron','copatron'].includes(u.staff_role);
-  openModal(`<button class="icon-btn close" onclick="adminAccounts('${staff?'staff':'clients'}')">×</button><h3>Modifier le compte</h3><div class="form-group"><label>Prénom & nom</label><input id="managedName" value="${esc(u.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="managedPhone" value="${esc(u.phone||'')}"></div>${staff?`<div class="form-group"><label>Identifiant</label><input value="${esc(u.staff_username||'')}" disabled><small>L’identifiant est généré automatiquement à la création.</small></div><div class="form-group"><label>Rôle</label><select id="managedRole" ${direction?'disabled':''}>${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}" ${u.staff_role===k?'selected':''}>${esc(v)}</option>`).join('')}</select>${direction?'<small>Les deux comptes direction restent Gérant / Cogérante.</small>':''}</div><label class="checkbox-row"><input id="managedShowPhone" type="checkbox" ${u.show_phone?'checked':''}> Afficher le numéro dans les contacts publics</label>`:`<div class="loyalty-box"><strong>${num(u.loyalty_points)} points fidélité</strong><div>Les points se gèrent séparément pour garder un historique.</div></div>`}<div class="modal-actions">${!staff?`<button class="btn ghost" onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})"><i data-lucide="gift"></i> Fidélité</button>`:''}<button class="btn primary" onclick="saveManagedAccount('${u.id}',${staff?'true':'false'},${direction?'true':'false'})">Enregistrer</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Modifier le compte</h3><div class="form-group"><label>Prénom & nom</label><input id="managedName" value="${esc(u.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="managedPhone" value="${esc(u.phone||'')}"></div>${staff?`<div class="form-group"><label>Identifiant</label><input value="${esc(u.staff_username||'')}" disabled><small>L’identifiant est généré automatiquement à la création.</small></div><div class="form-group"><label>Rôle</label><select id="managedRole" ${direction?'disabled':''}>${Object.entries(STAFF_ROLES).map(([k,v])=>`<option value="${k}" ${u.staff_role===k?'selected':''}>${esc(v)}</option>`).join('')}</select>${direction?'<small>Les deux comptes direction restent Gérant / Cogérante.</small>':''}</div><label class="checkbox-row"><input id="managedShowPhone" type="checkbox" ${u.show_phone?'checked':''}> Afficher le numéro dans les contacts publics</label>`:`<div class="loyalty-box"><strong>${num(u.loyalty_points)} points fidélité</strong><div>Les points se gèrent séparément pour garder un historique.</div></div>`}<div class="modal-actions">${!staff?`<button class="btn ghost" onclick="adjustPointsPrompt('${u.id}',${num(u.loyalty_points)})"><i data-lucide="gift"></i> Fidélité</button>`:''}<button class="btn primary" onclick="saveManagedAccount('${u.id}',${staff?'true':'false'},${direction?'true':'false'})">Enregistrer</button></div>`);
   iconRefresh();
 };
 window.saveManagedAccount=async(id,staff,direction)=>{
@@ -801,7 +890,7 @@ window.saveManagedAccount=async(id,staff,direction)=>{
   if(!display_name)return toast('Le nom est obligatoire.');
   const body={action:'update_account',user_id:id,display_name,phone};
   if(staff){body.staff_role=direction?(adminAccountsCache.find(x=>String(x.id)===String(id))?.staff_role||null):($('#managedRole')?.value||null);body.show_phone=Boolean($('#managedShowPhone')?.checked)}
-  try{if(hasSupabase)await invokeAdminUsers(body);toast('Compte modifié.');adminAccounts(staff?'staff':'clients');renderHome();}catch(err){toast(err.message||'Modification impossible.');}
+  try{if(hasSupabase)await invokeAdminUsers(body);toast('Compte modifié.');closeModal();renderHome();if(staff&&$('#employeesView')?.classList.contains('active'))await renderEmployeesList();else adminAccounts(staff?'staff':'clients');}catch(err){toast(err.message||'Modification impossible.');}
 };
 window.deleteManagedAccount=async id=>{
   const u=adminAccountsCache.find(x=>String(x.id)===String(id));if(!u)return;
@@ -811,14 +900,17 @@ window.deleteManagedAccount=async id=>{
 window.showCreateStaffAccount=()=>openModal(`<button class="icon-btn close" onclick="adminAccounts('staff')">×</button><h3>Créer un compte employé</h3><p class="page-intro">Renseignez seulement le prénom et le nom : l’identifiant <strong>prénom.nom</strong> est généré automatiquement.</p><div class="form-grid"><div class="form-group"><label>Prénom</label><input id="newStaffFirst" placeholder="Prénom"></div><div class="form-group"><label>Nom</label><input id="newStaffLast" placeholder="Nom"></div></div><div class="form-grid"><div class="form-group"><label>Téléphone</label><input id="newStaffPhone" placeholder="Numéro"></div><div class="form-group"><label>Rôle</label><select id="newStaffRole">${EMPLOYEE_ROLE_ENTRIES.map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></div></div><div class="form-group"><label>Mot de passe temporaire</label><div class="inline-input"><input id="newStaffPassword" value="${esc(randomTempPassword())}"><button class="btn mini" onclick="document.getElementById('newStaffPassword').value=randomTempPassword()" type="button"><i data-lucide="refresh-cw"></i></button></div></div><div class="modal-actions"><button class="btn primary" onclick="createStaffAccount()">Créer le compte</button></div>`);
 window.randomTempPassword=randomTempPassword;
 window.createStaffAccount=async()=>{
+  if(!requireCentralDatabase('la création de comptes employés'))return;
   const first=($('#newStaffFirst')?.value||'').trim(),last=($('#newStaffLast')?.value||'').trim(),phone=($('#newStaffPhone')?.value||'').trim(),role=$('#newStaffRole')?.value,password=$('#newStaffPassword')?.value||'';
   const username=makeUsername(first,last);
   if(!first||!last||!username||!username.includes('.'))return toast('Renseignez le prénom et le nom.');
   if(password.length<8)return toast('Le mot de passe temporaire doit contenir au moins 8 caractères.');
   try{
-    if(hasSupabase)await invokeAdminUsers({action:'create_staff',username,password,display_name:`${first} ${last}`.trim(),phone,staff_role:role});
-    else toast('Compte simulé créé.');
-    openModal(`<button class="icon-btn close" onclick="adminAccounts('staff')">×</button><span class="eyebrow">COMPTE CRÉÉ</span><h3>${esc(first)} ${esc(last)}</h3><div class="access-code-box"><small>Identifiant généré</small><code>${esc(username)}</code></div><div class="access-code-box"><small>Mot de passe temporaire</small><code>${esc(password)}</code></div><p class="page-intro">À la première connexion, l’employé devra obligatoirement choisir un nouveau mot de passe.</p><button class="btn primary full" onclick="navigator.clipboard?.writeText('${esc(username)} / ${esc(password)}');toast('Identifiants copiés.')"><i data-lucide="copy"></i> Copier les identifiants</button>`);iconRefresh();
+    const created=await invokeAdminUsers({action:'create_staff',username,password,display_name:`${first} ${last}`.trim(),phone,staff_role:role});
+    const verified=await invokeAdminUsers({action:'get_account',user_id:created.user_id});
+    if(!verified?.account?.id)throw new Error('Le compte a été créé mais sa vérification a échoué. Rechargez le panel Comptes.');
+    adminAccountsCache=[verified.account,...adminAccountsCache.filter(x=>String(x.id)!==String(verified.account.id))];
+    openModal(`<button class="icon-btn close" onclick="adminAccounts('staff')">×</button><span class="eyebrow">COMPTE ENREGISTRÉ</span><h3>${esc(first)} ${esc(last)}</h3><div class="notice success"><i data-lucide="cloud-check"></i><div><strong>Enregistré dans Supabase</strong><span>Ce compte est maintenant disponible sur tous les appareils connectés au site.</span></div></div><div class="access-code-box"><small>Identifiant généré</small><code>${esc(username)}</code></div><div class="access-code-box"><small>Mot de passe temporaire</small><code>${esc(password)}</code></div><p class="page-intro">À la première connexion, l’employé devra obligatoirement choisir un nouveau mot de passe.</p><div class="modal-actions"><button class="btn ghost" onclick="navigator.clipboard?.writeText('${esc(username)} / ${esc(password)}');toast('Identifiants copiés.')"><i data-lucide="copy"></i> Copier</button><button class="btn primary" onclick="closeModal();nav('employees')">Voir dans Liste employés</button></div>`);iconRefresh();
   }catch(err){toast(err.message||'Impossible de créer le compte.');}
 };
 window.resetStaffPasswordPrompt=(id,username)=>{const temp=randomTempPassword();openModal(`<button class="icon-btn close" onclick="adminAccounts('staff')">×</button><h3>Réinitialiser le mot de passe</h3><p class="page-intro">Le prochain mot de passe sera temporaire et devra être changé à la connexion.</p><div class="form-group"><label>Identifiant</label><input value="${esc(username)}" disabled></div><div class="form-group"><label>Nouveau mot de passe temporaire</label><input id="resetStaffPass" value="${esc(temp)}"></div><div class="modal-actions"><button class="btn primary" onclick="confirmStaffPasswordReset('${id}','${esc(username)}')">Réinitialiser</button></div>`)};
@@ -847,22 +939,50 @@ function scheduleRealtimeRefresh(table){
   clearTimeout(realtimeRefreshTimer);
   realtimeRefreshTimer=setTimeout(async()=>{
     if(['site_settings','products','announcements','contacts','jobs','profiles'].includes(table)) await renderHome();
-    if(table==='site_settings'){await getSettings();applySettingsToUI();if(isStaff())await renderStaffHome();}
+    if(table==='site_settings'){await getSettings();applySettingsToUI();if(uiIsStaff())await renderStaffHome();}
     if(table==='products'&&$('#shopView')?.classList.contains('active'))await renderShop();
     if(table==='announcements'&&$('#newsView')?.classList.contains('active'))await renderNews();
     if(table==='jobs'&&$('#recruitmentView')?.classList.contains('active'))await renderRecruitment();
     if(table==='contacts'&&$('#contactView')?.classList.contains('active'))await renderContact();
     if(table==='orders'){
-      if(isStaff())await renderStaffHome();
+      if(uiIsStaff())await renderStaffHome();
       if($('#ordersView')?.classList.contains('active'))await renderOrders();
       if($('#adminView')?.classList.contains('active'))await renderAdmin();
     }
   },120);
 }
+
+async function loadPreviewPermissions(role){
+  previewPermissions=new Set();
+  if(!role || role==='customer' || ['patron','copatron'].includes(role))return;
+  if(!hasSupabase)return;
+  const {data,error}=await sb.rpc('get_preview_role_permissions',{p_staff_role:role});
+  if(error)throw error;
+  previewPermissions=new Set((data||[]).map(x=>x.permission_key));
+}
+function updatePreviewBanner(){
+  const banner=$('#rolePreviewBanner');
+  if(!banner)return;
+  if(!isPreviewMode()){banner.classList.add('hidden');return;}
+  banner.classList.remove('hidden');
+  const label=previewRole==='customer'?'Client':roleLabel(previewRole);
+  $('#rolePreviewLabel').textContent=`Aperçu : ${label}`;
+}
+window.showRolePreviewPicker=()=>{
+  if(!canUseRolePreview())return toast('Ce compte ne peut pas utiliser le mode aperçu.');
+  const options=[['customer','Client'],...EMPLOYEE_ROLE_ENTRIES];
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">VOIR COMME</span><h3>Choisir une vue</h3><p class="page-intro">Ce mode modifie uniquement l’affichage. Votre vrai compte et vos droits restent inchangés.</p><div class="preview-role-grid">${options.map(([k,v])=>`<button class="preview-role-card" onclick="activateRolePreview('${k}')"><i data-lucide="${k==='customer'?'user-round':'badge-check'}"></i><span>${esc(v)}</span></button>`).join('')}</div>`);iconRefresh();
+};
+window.activateRolePreview=async role=>{
+  if(!canUseRolePreview())return toast('Accès refusé.');
+  try{await loadPreviewPermissions(role);previewRole=role;closeModal(true);nav('home');toast(`Mode aperçu : ${role==='customer'?'Client':roleLabel(role)}`);}catch(err){toast(err.message||'Impossible de charger cet aperçu.');}
+};
+window.exitRolePreview=()=>{previewRole=null;previewPermissions=new Set();updatePreviewBanner();nav('home');toast('Retour à votre vue réelle.');};
+
 function initRealtime(){
   if(!hasSupabase)return;
   if(realtimeChannel){try{sb.removeChannel(realtimeChannel)}catch{}realtimeChannel=null}
-  let ch=sb.channel('ltd-sandy-live-v7');
+  let ch=sb.channel('ltd-sandy-live-v8');
   ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleRealtimeRefresh(table));
   });
@@ -870,14 +990,17 @@ function initRealtime(){
 }
 
 async function initAuth(){
-  if(!hasSupabase)demo.profile=storageGet(LS.profile,null);else await getCurrentProfile();
+  if(!hasSupabase)demo.profile=null;else await getCurrentProfile();
   await loadMyPermissions();await getSettings();
-  if(!canManageAnything()&&$('#adminView').classList.contains('active'))nav('home');
+  if(previewRole&&!canUseRolePreview()){previewRole=null;previewPermissions=new Set();}
+  if(!uiCanManageAnything()&&$('#adminView').classList.contains('active'))nav('home');
   applySettingsToUI();await renderHome();initRealtime();
   if(demo.profile?.must_change_password && passwordPromptedFor!==demo.profile.id){passwordPromptedFor=demo.profile.id;setTimeout(()=>showPasswordChange(true),180)}
 }
 
 (async function init(){
-  seedDemo();iconRefresh();await initAuth();demo.promotions=await getPromotions();demo.jobs=await getJobs();renderShop();
+  seedDemo();iconRefresh();
+  if(!hasSupabase && requireSharedDb){document.body.classList.add('database-offline');}
+  await initAuth();demo.promotions=await getPromotions();demo.jobs=await getJobs();renderShop();
   if(hasSupabase)sb.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY')setTimeout(()=>showPasswordChange(false),200);setTimeout(initAuth,100)});
 })();
