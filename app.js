@@ -348,7 +348,8 @@ async function renderHome(){
   const monthFallback=month.length?month:products.filter(p=>p.available!==false && !p.is_pack).slice(0,4);
   $('#homeMonthProducts').innerHTML=monthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les produits du mois seront bientôt annoncés.</div>';
   const featuredMonth=products.filter(p=>(p.is_new||p.popular) && p.available!==false && !p.is_pack).slice(0,4);
-  $('#homeNewProducts').innerHTML=featuredMonth.map(homeProductHTML).join('')||'<div class="empty wide-empty">Le produit du mois sera bientôt annoncé.</div>';
+  const featuredMonthFallback=featuredMonth.length?featuredMonth:products.filter(p=>p.available!==false && !p.is_pack).slice(0,1);
+  $('#homeNewProducts').innerHTML=featuredMonthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Le produit du mois sera bientôt annoncé.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
   if($('#packMonthKicker')) $('#packMonthKicker').textContent=packMonth?'PACK DU MOIS':'PACKS & OFFRES';
   if($('#packMonthDesc')) $('#packMonthDesc').textContent=packMonth?`${packMonth.name} — ${packMonth.description||'Découvrez la sélection du mois.'}`:'Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.';
