@@ -1,4 +1,16 @@
 const C = window.LTD_CONFIG || {};
+
+// V8.2.1 — corrige automatiquement l'ancienne URL Supabase mal configurée.
+// L'URL doit être la racine du projet, sans /rest/v1/.
+if (C.SUPABASE_URL) {
+  const rawUrl = String(C.SUPABASE_URL).trim().replace(/\/+$/, '');
+  if (rawUrl.includes('phoneappltdss-1.supabase.co') || rawUrl.includes('/rest/v1')) {
+    C.SUPABASE_URL = 'https://mlelowyvwvlrunhnivzf.supabase.co';
+  } else {
+    C.SUPABASE_URL = rawUrl.replace(/\/rest\/v1\/?$/, '');
+  }
+}
+
 const hasSupabase = Boolean(C.SUPABASE_URL && C.SUPABASE_ANON_KEY);
 const requireSharedDb = C.REQUIRE_SHARED_DATABASE !== false;
 const sb = hasSupabase ? window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
