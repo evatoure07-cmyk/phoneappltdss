@@ -1,7 +1,7 @@
 // Configuration de secours utilisée tant que Supabase n'est pas connecté.
 // Une fois Supabase configuré, la plupart de ces valeurs peuvent être modifiées depuis l'espace Direction.
 window.LTD_CONFIG = {
-  SUPABASE_URL: "https://mlelowyvwvlrunhnivzf.supabase.co/rest/v1/",
+  SUPABASE_URL: "https://phoneappltdss-1.supabase.co/rest/v1/",
   SUPABASE_ANON_KEY: "sb_publishable_fCEEBzCjmZKfyz8JIgTLqw_AUViyHeZ",
   BUSINESS_NAME: "LTD Sandy Shores",
   BUSINESS_SUBTITLE: "Boutique • Livraison • Station-service",
