@@ -132,6 +132,19 @@ const uiCanManageAnything = () => {
 };
 const blockPreviewMutation = () => { if(isPreviewMode()){ toast('Mode aperçu : quittez "Voir comme" pour effectuer cette action.'); return true; } return false; };
 const iconRefresh = () => window.lucide && lucide.createIcons();
+const THEME_KEY='ltd-theme';
+function applyTheme(theme){
+  const selected=theme==='light'?'light':'dark';
+  document.documentElement.dataset.theme=selected;
+  localStorage.setItem(THEME_KEY,selected);
+  const btn=$('#themeToggle');
+  if(btn){btn.innerHTML=`<i data-lucide="${selected==='dark'?'sun':'moon'}"></i>`;btn.title=selected==='dark'?'Passer en mode clair':'Passer en mode sombre';}
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content',selected==='dark'?'#0d0b08':'#f7f1e6');
+  iconRefresh();
+}
+function toggleTheme(){applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');}
+window.toggleTheme=toggleTheme;
+
 
 const STAFF_EMAIL_DOMAIN = 'ltd-sandy-shores.example';
 const DIRECTION_USERNAMES = new Set(['luciana.angelmars','blake.mars']);
@@ -282,7 +295,7 @@ function nav(name){
   if(name==='employees'&&!isDirection())return toast('La liste des employés est réservée à la direction.');
   $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();window.scrollTo({top:0,behavior:'smooth'});
+  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
@@ -322,6 +335,8 @@ document.addEventListener('click',async e=>{
   }
 });
 $('#employeeListSearch')?.addEventListener('input',renderEmployeeListRows);
+$('#partnershipAdminSearch')?.addEventListener('input',renderPartnershipsPage);
+$('#themeToggle')?.addEventListener('click',toggleTheme);
 $('#refreshEmployees')?.addEventListener('click',renderEmployeesList);
 
 function applySettingsToUI(){
@@ -443,8 +458,8 @@ async function renderShop(){
 }
 function productHTML(p){
   const available=p.available!==false && (p.stock===null||p.stock===undefined||num(p.stock)>0);
-  const badge=p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':''));
-  return `<article class="product-card ${p.is_pack?'pack-card':''} ${available?'':'unavailable'}">${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4><p>${esc(p.description||'')}</p><div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
+  const badge=p.is_product_of_month?'Produit du mois':(p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':'')));
+  return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${available?'':'unavailable'}">${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4><p>${esc(p.description||'')}</p><div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
 }
 $('#productSearch').addEventListener('input',renderShop);
 document.addEventListener('click',e=>{
@@ -859,25 +874,49 @@ window.saveProduct=async id=>{
   }
   closeModal();await renderHome();renderShop();toast('Produit enregistré.');
 };
-async function adminProducts(){const list=await getProducts(true);demo.products=list;openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Catalogue</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'🛒')}</div><div><strong>${esc(p.name)}${p.is_product_of_month?' • ⭐ PRODUIT DU MOIS':''}</strong><p>${money(p.price)} • ${esc(p.category)} • ${p.available!==false?'Disponible':'Indisponible'}${p.stock!==null&&p.stock!==undefined?` • Stock ${p.stock}`:''}</p></div><div class="catalog-actions"><button onclick="editAdminProduct('${p.id}')"><i data-lucide="pencil"></i></button><button onclick="toggleProduct('${p.id}',${p.available!==false})"><i data-lucide="${p.available!==false?'eye-off':'eye'}"></i></button></div></div>`).join('')||'<div class="empty">Aucun produit.</div>'}</div><button class="btn primary full" style="margin-top:13px" onclick="adminProduct()"><i data-lucide="package-plus"></i> Ajouter un produit</button>`);iconRefresh()}
-async function adminProductOfMonth(){
-  const list=(await getProducts(true)).filter(p=>!p.is_pack&&p.active!==false);
-  demo.products=await getProducts(true);
-  const current=list.find(p=>p.is_product_of_month);
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">MISE EN AVANT</span><h3>Produit du mois</h3><p class="page-intro">Choisissez le produit qui apparaîtra dans la section Produit du mois sur l’accueil.</p><div class="form-group"><label>Produit sélectionné</label><select id="monthProductSelect"><option value="">Aucun produit du mois</option>${list.map(p=>`<option value="${p.id}" ${current&&String(current.id)===String(p.id)?'selected':''}>${esc(p.name)} — ${money(p.price)}</option>`).join('')}</select></div>${current?`<div class="notice"><div><strong>Actuellement : ${esc(current.name)}</strong><span>${money(current.price)} • ${esc(current.category)}</span></div></div>`:''}<div class="modal-actions"><button class="btn primary" onclick="saveProductOfMonth()">Enregistrer</button></div>`);
+async function adminProducts(){
+  const list=await getProducts(true);demo.products=list;
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Catalogue</h3><button class="btn primary full" style="margin-bottom:12px" onclick="adminProduct()"><i data-lucide="package-plus"></i> Ajouter un produit</button><div class="search-wrap admin-search"><i data-lucide="search"></i><input id="adminProductSearch" placeholder="Rechercher un produit…"></div><div id="adminProductList" class="stack"></div>`);
+  const input=$('#adminProductSearch');if(input)input.addEventListener('input',renderAdminProductRows);
+  renderAdminProductRows();iconRefresh();
+}
+function renderAdminProductRows(){
+  const target=$('#adminProductList');if(!target)return;
+  const q=($('#adminProductSearch')?.value||'').trim().toLowerCase();
+  const list=(demo.products||[]).filter(p=>!q||`${p.name} ${p.category||''} ${p.description||''}`.toLowerCase().includes(q));
+  target.innerHTML=list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'🛒')}</div><div><strong>${esc(p.name)}${p.is_product_of_month?' • ⭐ PRODUIT DU MOIS':''}</strong><p>${money(p.price)} • ${esc(p.category)} • ${p.available!==false?'Disponible':'Indisponible'}${p.stock!==null&&p.stock!==undefined?` • Stock ${p.stock}`:''}</p></div><div class="catalog-actions"><button onclick="editAdminProduct('${p.id}')"><i data-lucide="pencil"></i></button><button onclick="toggleProduct('${p.id}',${p.available!==false})"><i data-lucide="${p.available!==false?'eye-off':'eye'}"></i></button></div></div>`).join('')||'<div class="empty">Aucun produit trouvé.</div>';
   iconRefresh();
 }
+let monthProductAdminList=[];
+async function adminProductOfMonth(){
+  monthProductAdminList=(await getProducts(true)).filter(p=>!p.is_pack&&p.active!==false);
+  demo.products=await getProducts(true);
+  const current=monthProductAdminList.find(p=>p.is_product_of_month);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">MISE EN AVANT</span><h3>Produit du mois</h3><p class="page-intro">Recherchez un produit, sélectionnez-le puis validez.</p><div class="search-wrap admin-search"><i data-lucide="search"></i><input id="monthProductSearch" placeholder="Rechercher un produit…"></div><input type="hidden" id="monthProductSelect" value="${current?.id||''}"><div id="monthProductResults" class="month-product-results"></div><div class="modal-actions"><button class="btn primary" onclick="saveProductOfMonth()">Valider le produit du mois</button></div>`);
+  $('#monthProductSearch')?.addEventListener('input',renderMonthProductResults);
+  renderMonthProductResults();iconRefresh();
+}
+function renderMonthProductResults(){
+  const target=$('#monthProductResults');if(!target)return;
+  const q=($('#monthProductSearch')?.value||'').trim().toLowerCase();
+  const selected=$('#monthProductSelect')?.value||'';
+  const list=monthProductAdminList.filter(p=>!q||`${p.name} ${p.category||''}`.toLowerCase().includes(q));
+  target.innerHTML=list.map(p=>`<button type="button" class="month-product-choice ${String(selected)===String(p.id)?'selected':''}" onclick="selectMonthProduct('${p.id}')"><span class="catalog-icon">${esc(p.emoji||'🛒')}</span><span><strong>${esc(p.name)}</strong><small>${money(p.price)} • ${esc(p.category||'Divers')}</small></span><i data-lucide="${String(selected)===String(p.id)?'circle-check-big':'circle'}"></i></button>`).join('')||'<div class="empty">Aucun produit trouvé.</div>';
+  iconRefresh();
+}
+window.selectMonthProduct=id=>{const input=$('#monthProductSelect');if(input)input.value=id;renderMonthProductResults();};
 window.saveProductOfMonth=async()=>{
   const id=$('#monthProductSelect')?.value||'';
+  if(!id)return toast('Choisissez un produit avant de valider.');
   if(hasSupabase){
     const{error:clearError}=await sb.from('products').update({is_product_of_month:false}).eq('is_pack',false);
     if(clearError)return toast(clearError.message);
-    if(id){const{error}=await sb.from('products').update({is_product_of_month:true}).eq('id',id);if(error)return toast(error.message)}
+    const{error}=await sb.from('products').update({is_product_of_month:true}).eq('id',id);if(error)return toast(error.message);
   }else{
     demo.products.forEach(p=>{if(!p.is_pack)p.is_product_of_month=String(p.id)===String(id)});
     storageSet(LS.products,demo.products);
   }
-  toast(id?'Produit du mois modifié.':'Produit du mois retiré.');
+  toast('Produit du mois modifié.');
   await renderHome();
   adminProductOfMonth();
 };
@@ -885,12 +924,14 @@ window.editAdminProduct=id=>{const p=demo.products.find(x=>String(x.id)===String
 window.toggleProduct=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('products').update({available:!current}).eq('id',id);if(error)return toast(error.message)}else{const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.available=!current;storageSet(LS.products,demo.products)}adminProducts();};
 async function adminPacks(){
   const list=(await getProducts(true)).filter(p=>p.is_pack);demo.products=await getProducts(true);
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Packs</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'📦')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)}${p.is_pack_of_month?' • PACK DU MOIS':''}</p></div><div class="catalog-actions"><button onclick="editAdminPack('${p.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')||'<div class="empty">Aucun pack.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="adminPack()"><i data-lucide="plus"></i> Nouveau pack</button>`);iconRefresh();
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Packs</h3><button class="btn primary full" style="margin-bottom:12px" onclick="adminPack()"><i data-lucide="plus"></i> Nouveau pack</button><div class="search-wrap admin-search"><i data-lucide="search"></i><input id="adminPackSearch" placeholder="Rechercher un pack…"></div><div id="adminPackList" class="stack"></div>`);
+  const draw=()=>{const q=($('#adminPackSearch')?.value||'').trim().toLowerCase();const rows=list.filter(p=>!q||p.name.toLowerCase().includes(q));$('#adminPackList').innerHTML=rows.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'📦')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)}${p.is_pack_of_month?' • PACK DU MOIS':''}</p></div><div class="catalog-actions"><button onclick="editAdminPack('${p.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')||'<div class="empty">Aucun pack trouvé.</div>';iconRefresh();};
+  $('#adminPackSearch')?.addEventListener('input',draw);draw();iconRefresh();
 }
 window.editAdminPack=async id=>{const all=await getProducts(true);demo.products=all;const p=all.find(x=>String(x.id)===String(id));if(p)adminPack(p)};
 async function adminPack(pack=null){
   const all=await getProducts(true);demo.products=all;const base=all.filter(p=>!p.is_pack&&p.active!==false);let items=[];if(pack)items=await getPackItems(pack.id);const qtyMap=new Map(items.map(i=>[String(i.product_id),num(i.quantity)]));
-  openModal(`<button class="icon-btn close" onclick="adminPacks()">×</button><h3>${pack?'Modifier':'Créer'} un pack</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="packName" value="${esc(pack?.name||'')}"></div><div class="form-group"><label>Prix du pack</label><input id="packPrice" type="number" min="0" step="0.01" value="${num(pack?.price)}"></div></div><div class="form-group"><label>Description</label><input id="packDesc" value="${esc(pack?.description||'')}"></div><div class="form-group"><label>Emoji / icône</label><input id="packEmoji" value="${esc(pack?.emoji||'📦')}"></div><label class="checkbox-row"><input type="checkbox" id="packMonth" ${pack?.is_pack_of_month?'checked':''}> Définir comme Pack du mois</label><label class="checkbox-row"><input type="checkbox" id="packAvailable" ${pack?.available!==false?'checked':''}> Disponible à la vente</label><div class="divider"></div><span class="eyebrow">CONTENU DU PACK</span><div class="permission-grid">${base.map(p=>{const q=qtyMap.get(String(p.id))||0;return `<div class="permission-row"><div><strong>${esc(p.emoji||'🛒')} ${esc(p.name)}</strong><span>${money(p.price)}</span></div><div style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="pack-item-check" data-product="${p.id}" ${q>0?'checked':''}><input class="form-control pack-item-qty" data-product="${p.id}" type="number" min="1" max="99" value="${q||1}" style="width:62px;padding:8px"></div></div>`}).join('')||'<div class="empty">Ajoutez d’abord des produits au catalogue.</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="savePack('${pack?.id||''}')">Enregistrer le pack</button></div>`);iconRefresh();
+  openModal(`<button class="icon-btn close" onclick="adminPacks()">×</button><h3>${pack?'Modifier':'Créer'} un pack</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="packName" value="${esc(pack?.name||'')}"></div><div class="form-group"><label>Prix du pack</label><input id="packPrice" type="number" min="0" step="0.01" value="${num(pack?.price)}"></div></div><div class="form-group"><label>Description</label><input id="packDesc" value="${esc(pack?.description||'')}"></div><div class="form-group"><label>Emoji / icône</label><input id="packEmoji" value="${esc(pack?.emoji||'📦')}"></div><label class="checkbox-row"><input type="checkbox" id="packMonth" ${pack?.is_pack_of_month?'checked':''}> Définir comme Pack du mois</label><label class="checkbox-row"><input type="checkbox" id="packAvailable" ${pack?.available!==false?'checked':''}> Disponible à la vente</label><div class="divider"></div><span class="eyebrow">CONTENU DU PACK</span><div class="search-wrap admin-search" style="margin-top:10px"><i data-lucide="search"></i><input id="packItemSearch" placeholder="Rechercher un article à ajouter…"></div><div class="permission-grid" id="packItemList">${base.map(p=>{const q=qtyMap.get(String(p.id))||0;return `<div class="permission-row pack-item-row" data-search="${esc((p.name+' '+(p.category||'')).toLowerCase())}"><div><strong>${esc(p.emoji||'🛒')} ${esc(p.name)}</strong><span>${money(p.price)}</span></div><div style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="pack-item-check" data-product="${p.id}" ${q>0?'checked':''}><input class="form-control pack-item-qty" data-product="${p.id}" type="number" min="1" max="99" value="${q||1}" style="width:62px;padding:8px"></div></div>`}).join('')||'<div class="empty">Ajoutez d’abord des produits au catalogue.</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="savePack('${pack?.id||''}')">Enregistrer le pack</button></div>`);$('#packItemSearch')?.addEventListener('input',e=>{const q=e.target.value.trim().toLowerCase();$('.pack-item-row').forEach(row=>row.classList.toggle('hidden',q&&!String(row.dataset.search||'').includes(q)))});iconRefresh();
 }
 window.savePack=async id=>{const x={name:$('#packName').value.trim(),description:$('#packDesc').value.trim(),price:num($('#packPrice').value),category:'Packs',emoji:$('#packEmoji').value.trim()||'📦',is_pack:true,is_pack_of_month:$('#packMonth').checked,available:$('#packAvailable').checked,active:true,stock:null};if(!x.name)return toast('Nom du pack obligatoire.');const items=$$('.pack-item-check:checked').map(c=>({product_id:c.dataset.product,quantity:Math.max(1,Math.floor(num($(`.pack-item-qty[data-product="${c.dataset.product}"]`)?.value)||1))}));if(!items.length)return toast('Ajoutez au moins un article au pack.');let packId=id;
   if(hasSupabase){if(x.is_pack_of_month)await sb.from('products').update({is_pack_of_month:false}).eq('is_pack',true);if(id){const{error}=await sb.from('products').update(x).eq('id',id);if(error)return toast(error.message)}else{const{data,error}=await sb.from('products').insert(x).select('id').single();if(error)return toast(error.message);packId=data.id}await sb.from('pack_items').delete().eq('pack_id',packId);const{error}=await sb.from('pack_items').insert(items.map(i=>({...i,pack_id:packId})));if(error)return toast(error.message)}else{if(x.is_pack_of_month)demo.products.forEach(p=>p.is_pack_of_month=false);if(id){const i=demo.products.findIndex(p=>String(p.id)===String(id));demo.products[i]={...demo.products[i],...x}}else{packId=uid('pack');demo.products.push({...x,id:packId})}demo.packItems=demo.packItems.filter(i=>String(i.pack_id)!==String(packId)).concat(items.map(i=>({...i,pack_id:packId,id:uid('pi')})));storageSet(LS.products,demo.products);storageSet(LS.packItems,demo.packItems)}toast('Pack enregistré.');renderHome();adminPacks();};
@@ -1032,16 +1073,24 @@ async function adminCustomers(){return adminAccounts('clients')}
 
 window.adjustPointsPrompt=(id,current)=>openModal(`<button class="icon-btn close" onclick="adminCustomers()">×</button><h3>Points fidélité</h3><div class="loyalty-box"><strong>${current} points actuellement</strong><div>Nombre positif pour ajouter, négatif pour retirer.</div></div><div class="form-group"><label>Ajustement</label><input id="pointsDelta" type="number" value="10"></div><div class="form-group"><label>Motif</label><input id="pointsReason" placeholder="Ex : geste commercial"></div><div class="modal-actions"><button class="btn primary" onclick="savePointsAdjustment('${id}')">Valider</button></div>`);
 window.savePointsAdjustment=async id=>{const delta=Math.trunc(num($('#pointsDelta').value)),reason=$('#pointsReason').value.trim();if(!delta)return toast('Indiquez un ajustement différent de 0.');if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('admin_adjust_loyalty',{p_user_id:id,p_delta:delta,p_reason:reason});if(error)return toast(error.message)}else if(String(id)===String(demo.profile?.id)){demo.profile.loyalty_points=Math.max(0,num(demo.profile.loyalty_points)+delta);storageSet(LS.profile,demo.profile)}closeModal();toast('Points mis à jour.');adminCustomers();};
-async function adminPartnerships(){
-  let list=[];
-  if(hasSupabase){const {data,error}=await sb.from('partnership_requests').select('*').order('created_at',{ascending:false}).limit(100);if(error)return toast(error.message);list=data||[]}
-  else list=demo.partnerships;
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Demandes de partenariat</h3><div class="stack">${list.map(r=>`<div class="customer-card"><div class="status-line"><strong>${esc(r.business_name)}</strong><span class="status ${r.status==='accepted'?'delivered':r.status==='rejected'?'cancelled':'pending'}">${({new:'Nouveau',reviewed:'À l’étude',accepted:'Accepté',rejected:'Refusé'})[r.status]||esc(r.status)}</span></div><p><strong>${esc(r.contact_name)}</strong> • ${esc(r.phone)} • ${esc(r.partnership_type)}</p><p>${esc(r.message||'')}</p><div class="order-actions"><button onclick="setPartnershipStatus('${r.id}','reviewed')">À l’étude</button><button class="primary-action" onclick="setPartnershipStatus('${r.id}','accepted')">Accepter</button><button onclick="setPartnershipStatus('${r.id}','rejected')">Refuser</button></div></div>`).join('')||'<div class="empty">Aucune demande de partenariat.</div>'}</div>`);iconRefresh();
+async function getPartnershipRequests(){
+  if(hasSupabase){const {data,error}=await sb.from('partnership_requests').select('*').order('created_at',{ascending:false}).limit(100);if(error){toast(error.message);return []}return data||[]}
+  return demo.partnerships||[];
 }
+async function renderPartnershipsPage(){
+  if(!isDirection()&&!uiCan('partnerships_manage'))return nav('admin');
+  const list=await getPartnershipRequests();
+  const target=$('#partnershipRequestsList');if(!target)return;
+  const q=($('#partnershipAdminSearch')?.value||'').trim().toLowerCase();
+  const filtered=list.filter(r=>!q||`${r.business_name} ${r.contact_name} ${r.phone} ${r.partnership_type} ${r.message||''}`.toLowerCase().includes(q));
+  target.innerHTML=filtered.map(r=>`<div class="partnership-admin-card"><div class="status-line"><div><span class="eyebrow">DEMANDE DE PARTENARIAT</span><h3>${esc(r.business_name)}</h3></div><span class="status ${r.status==='accepted'?'delivered':r.status==='rejected'?'cancelled':'pending'}">${({new:'Nouveau',reviewed:'À l’étude',accepted:'Accepté',rejected:'Refusé'})[r.status]||esc(r.status)}</span></div><div class="partnership-meta"><span><i data-lucide="user-round"></i> ${esc(r.contact_name)}</span><span><i data-lucide="phone"></i> ${esc(r.phone)}</span><span><i data-lucide="handshake"></i> ${esc(r.partnership_type)}</span></div><p>${esc(r.message||'')}</p><div class="order-actions"><button onclick="setPartnershipStatus('${r.id}','reviewed')">À l’étude</button><button class="primary-action" onclick="setPartnershipStatus('${r.id}','accepted')">Accepter</button><button onclick="setPartnershipStatus('${r.id}','rejected')">Refuser</button></div></div>`).join('')||'<div class="empty">Aucune demande de partenariat.</div>';
+  iconRefresh();
+}
+async function adminPartnerships(){nav('partnerships');}
 window.setPartnershipStatus=async(id,status)=>{
   if(hasSupabase){const {error}=await sb.from('partnership_requests').update({status}).eq('id',id);if(error)return toast(error.message)}
   else{const row=demo.partnerships.find(x=>String(x.id)===String(id));if(row)row.status=status;storageSet(LS.partnerships,demo.partnerships)}
-  toast('Statut mis à jour.');adminPartnerships();
+  toast('Statut mis à jour.');renderPartnershipsPage();
 };
 
 window.requestClientPasswordReset=async email=>{if(!hasSupabase)return toast('Cette action nécessite Supabase.');try{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;toast('Email de réinitialisation envoyé.')}catch(err){toast(err.message||'Envoi impossible.')}};
@@ -1111,6 +1160,7 @@ async function initAuth(){
 }
 
 (async function init(){
+  applyTheme(localStorage.getItem(THEME_KEY)||'dark');
   seedDemo();iconRefresh();
   if(!hasSupabase && requireSharedDb){document.body.classList.add('database-offline');}
   await initAuth();demo.promotions=await getPromotions();demo.jobs=await getJobs();renderShop();
