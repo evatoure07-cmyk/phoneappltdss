@@ -703,8 +703,15 @@ window.submitEmployeeAuth=async()=>{
     if(hasSupabase){
       let {error}=await sb.auth.signInWithPassword({email:staffEmail(username),password:pass});
       if(error && DIRECTION_USERNAMES.has(username)){
-        try{await invokeAdminUsers({action:'bootstrap_direction',username,password:pass})}catch(bootErr){throw bootErr}
-        ({error}=await sb.auth.signInWithPassword({email:staffEmail(username),password:pass}));
+        try{
+          await invokeAdminUsers({action:'bootstrap_direction',username,password:pass});
+          ({error}=await sb.auth.signInWithPassword({email:staffEmail(username),password:pass}));
+        }catch(bootErr){
+          const msg=String(bootErr?.message||'').toLowerCase();
+          const alreadyActivated=msg.includes('déjà')||msg.includes('already')||msg.includes('activé')||msg.includes('used')||msg.includes('utilisé');
+          if(!alreadyActivated)throw bootErr;
+          // Le compte existe déjà : on conserve simplement l'erreur de connexion initiale.
+        }
       }
       if(error)throw error;
     }else{
