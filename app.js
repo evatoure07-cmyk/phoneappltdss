@@ -293,6 +293,7 @@ async function getJobs(includeInactive=false){
 function nav(name){
   if(name==='admin'&&!uiCanManageAnything())return toast('Ce rôle n’a pas accès à l’administration.');
   if(name==='employees'&&!isDirection())return toast('La liste des employés est réservée à la direction.');
+  if(name==='partnerships'&&!isDirection())return toast('Les demandes de partenariat sont réservées à la direction.');
   $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
   if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
@@ -1078,7 +1079,7 @@ async function getPartnershipRequests(){
   return demo.partnerships||[];
 }
 async function renderPartnershipsPage(){
-  if(!isDirection()&&!uiCan('partnerships_manage'))return nav('admin');
+  if(!isDirection())return nav('admin');
   const list=await getPartnershipRequests();
   const target=$('#partnershipRequestsList');if(!target)return;
   const q=($('#partnershipAdminSearch')?.value||'').trim().toLowerCase();
@@ -1105,6 +1106,7 @@ function scheduleRealtimeRefresh(table){
     if(table==='announcements'&&$('#newsView')?.classList.contains('active'))await renderNews();
     if(table==='jobs'&&$('#recruitmentView')?.classList.contains('active'))await renderRecruitment();
     if(table==='contacts'&&$('#contactView')?.classList.contains('active'))await renderContact();
+    if(table==='partnership_requests'&&$('#partnershipsView')?.classList.contains('active'))await renderPartnershipsPage();
     if(table==='orders'){
       if(uiIsStaff())await renderStaffHome();
       if($('#ordersView')?.classList.contains('active'))await renderOrders();
