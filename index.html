@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=8.4.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -20,6 +20,7 @@
         <div class="brand-copy"><div class="eyebrow">SANDY SHORES</div><h1>Site officiel</h1></div>
       </button>
       <div class="top-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="Changer le thème" title="Passer en mode clair"><i data-lucide="sun"></i></button>
         <button class="icon-btn staff-access-btn" id="employeeAccessBtn" aria-label="Connexion employés" title="Connexion employés"><i data-lucide="badge-check"></i></button>
         <button class="status-dot-wrap" id="businessStatusButton" aria-label="Statut"><span class="status-dot"></span><span id="businessStatusMini">Ouvert</span></button>
         <button class="icon-btn" id="accountBtn" aria-label="Compte"><i data-lucide="user-round"></i></button>
@@ -283,11 +284,22 @@
           <button class="admin-card direction-only" data-admin="accounts"><i data-lucide="users-round"></i><span>Comptes</span></button>
           <button class="admin-card direction-only" data-admin="permissions"><i data-lucide="list-checks"></i><span>Permissions</span></button>
           <button class="admin-card" id="rolePreviewAdminCard" data-ltd-action="role-preview"><i data-lucide="scan-eye"></i><span>Voir comme…</span></button>
-          <button class="admin-card" data-admin="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
+          <button class="admin-card" data-nav="partnerships" data-perm="partnerships_manage"><i data-lucide="handshake"></i><span>Partenariats</span></button>
         </div>
         <div class="section-heading sub"><div><span class="eyebrow">APERÇU</span><h3>Activité récente</h3></div></div>
         <div id="adminActivity" class="stack"></div>
       </section>
+
+      <section class="view" id="partnershipsView">
+        <div class="section-heading">
+          <div><span class="eyebrow">DIRECTION</span><h2>Partenariats</h2></div>
+          <button class="btn mini" data-nav="admin"><i data-lucide="arrow-left"></i> Administration</button>
+        </div>
+        <p class="page-intro">Consultez et traitez toutes les demandes de partenariat reçues par le LTD.</p>
+        <div class="search-wrap"><i data-lucide="search"></i><input id="partnershipAdminSearch" placeholder="Rechercher une entreprise, un contact…"></div>
+        <div id="partnershipRequestsList" class="stack"></div>
+      </section>
+
     </main>
 
     <nav class="bottom-nav">
@@ -303,6 +315,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.3.1"></script>
+  <script src="app.js?v=8.4.0"></script>
 </body>
 </html>
