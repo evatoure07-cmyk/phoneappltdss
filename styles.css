@@ -138,3 +138,102 @@ body.staff-mode #homeView .client-home-section{display:none!important}body.staff
 .database-warning{border:1px solid rgba(255,153,102,.35);background:rgba(95,42,18,.88);color:#ffe0c7}.database-warning svg{width:19px;flex:0 0 auto}.database-warning strong,.database-warning span{display:block}.database-warning strong{font-size:12px}.database-warning span{font-size:10px;opacity:.78;margin-top:2px}body.database-offline .database-warning.hidden{display:flex!important}
 .role-preview-banner{border:1px solid rgba(217,169,78,.4);background:linear-gradient(135deg,rgba(217,169,78,.16),rgba(28,20,10,.96));justify-content:space-between}.role-preview-banner>div{display:flex;align-items:center;gap:8px}.role-preview-banner svg{width:18px;color:var(--gold2)}.role-preview-banner strong{font-size:11px}.role-preview-banner button{border:1px solid rgba(217,169,78,.28);background:#ffffff0a;color:var(--cream);border-radius:10px;padding:8px 10px;font-size:10px;font-weight:800}
 .preview-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.preview-role-card{min-height:82px;border:1px solid var(--line);background:var(--surface);color:var(--cream);border-radius:16px;padding:13px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;text-align:left}.preview-role-card svg{width:20px;color:var(--gold)}.preview-role-card span{font-size:11px;font-weight:800}.notice.success{background:rgba(114,214,157,.08);border-color:rgba(114,214,157,.28)}.notice.success svg{color:var(--ok)}
+
+
+/* ===== V8.4 — recherches admin, produit du mois, partenariats, thème ===== */
+.admin-search{margin-bottom:12px}
+.product-card{position:relative}
+.product-card.product-of-month{
+  border-color:rgba(241,203,115,.82);
+  background:linear-gradient(155deg,rgba(217,169,78,.20),var(--surface) 48%);
+  box-shadow:0 0 0 1px rgba(241,203,115,.15),0 14px 34px rgba(217,169,78,.13)
+}
+.product-card.product-of-month .product-visual{
+  background:linear-gradient(145deg,rgba(106,75,26,.72),var(--surface2));
+  border:1px solid rgba(241,203,115,.30)
+}
+.product-month-ribbon{
+  display:block;width:max-content;max-width:100%;margin:0 0 9px;
+  padding:6px 9px;border-radius:999px;
+  background:linear-gradient(135deg,var(--gold2),var(--gold));
+  color:#1b1308;font-size:8px;font-weight:900;letter-spacing:.11em
+}
+.product-card.product-of-month h4{color:var(--gold2)}
+
+.month-product-results{display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow:auto;margin:10px 0}
+.month-product-choice{
+  width:100%;border:1px solid var(--line);background:var(--surface);color:var(--cream);
+  border-radius:15px;padding:10px;display:grid;grid-template-columns:44px 1fr auto;gap:10px;
+  align-items:center;text-align:left;cursor:pointer
+}
+.month-product-choice>span:nth-child(2){min-width:0}
+.month-product-choice strong{display:block;font-size:12px}
+.month-product-choice small{display:block;color:var(--muted);font-size:9px;margin-top:3px}
+.month-product-choice>svg{width:19px;color:var(--muted)}
+.month-product-choice.selected{
+  border-color:var(--gold);background:rgba(217,169,78,.10);
+  box-shadow:inset 0 0 0 1px rgba(241,203,115,.10)
+}
+.month-product-choice.selected>svg{color:var(--gold2)}
+
+.partnership-admin-card{
+  border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:16px
+}
+.partnership-admin-card .status-line{align-items:flex-start}
+.partnership-admin-card h3{font:800 20px 'Playfair Display';margin:4px 0 0}
+.partnership-admin-card>p{color:var(--muted);font-size:11px;line-height:1.55;margin:14px 0}
+.partnership-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.partnership-meta span{
+  display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
+  background:var(--surface2);border-radius:999px;padding:7px 9px;color:var(--muted);font-size:9px
+}
+.partnership-meta svg{width:13px;height:13px;color:var(--gold)}
+
+html[data-theme="light"]{
+  --bg:#f7f1e6;--surface:#fffaf1;--surface2:#f1e7d6;--surface3:#eadbc4;--line:#d8c6a8;
+  --gold:#b47b1f;--gold2:#8c5c12;--cream:#2a2117;--muted:#766957;--danger:#b84242;--ok:#2c8a59;
+  --warn:#a96c18;--blue:#406cae;--shadow:0 18px 45px rgba(92,65,25,.13)
+}
+html[data-theme="light"] body{
+  background:radial-gradient(circle at 50% -15%,#fff8ea 0,#f7f1e6 46%);
+  color:var(--cream)
+}
+html[data-theme="light"] .topbar{
+  background:rgba(247,241,230,.92);border-bottom-color:rgba(180,123,31,.18)
+}
+html[data-theme="light"] .bottom-nav{
+  background:rgba(247,241,230,.96);border-top-color:rgba(180,123,31,.18)
+}
+html[data-theme="light"] .sticky-head{
+  background:linear-gradient(180deg,var(--bg) 70%,rgba(247,241,230,0))
+}
+html[data-theme="light"] .modal{background:#fffaf1}
+html[data-theme="light"] .form-group input,
+html[data-theme="light"] .form-group textarea,
+html[data-theme="light"] .form-group select,
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .qty-input,
+html[data-theme="light"] .cart-qty input,
+html[data-theme="light"] .promo-row input,
+html[data-theme="light"] .permission-row{
+  background:#fffdf8;color:var(--cream)
+}
+html[data-theme="light"] .product-visual{
+  background:linear-gradient(145deg,#f2e5d1,#eadbc4)
+}
+html[data-theme="light"] .stock-badge{
+  background:rgba(255,250,241,.92);color:#5f503d
+}
+html[data-theme="light"] .staff-home-dashboard{
+  background:linear-gradient(145deg,#fff8eb,#f4ead9)
+}
+html[data-theme="light"] .staff-home-status{background:#fffdf8;border-color:var(--line)}
+html[data-theme="light"] .home-shortcut{background:linear-gradient(145deg,#fffaf1,#f0e5d4)}
+html[data-theme="light"] .announcement.featured{background:linear-gradient(145deg,#fff5df,#f7eddd)}
+html[data-theme="light"] .recruitment-panel{background:linear-gradient(145deg,#fff7e8,#efe2cf)}
+html[data-theme="light"] .toast{background:#fff7e8}
+html[data-theme="light"] .modal-backdrop{background:rgba(68,48,22,.35)}
+html[data-theme="light"] .nav-item{color:#8a7b68}
+html[data-theme="light"] .checkbox-row,
+html[data-theme="light"] .form-group label,
+html[data-theme="light"] .field-label{color:#655846}
