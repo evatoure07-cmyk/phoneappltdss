@@ -66,6 +66,7 @@ let settings = {...defaults.settings};
 let activeCategory = 'Tous';
 let currentPromo = null;
 let currentOrderMode = 'delivery';
+let guestOrderDraft = null;
 let staffFilter = 'active';
 let realtimeChannel = null;
 let modalLocked = false;
@@ -539,6 +540,7 @@ function renderCartModal(){
     <div>${demo.cart.map(x=>`<div class="cart-row"><div class="cart-main"><strong>${esc(x.name)}</strong><span class="cart-price">${money(x.price)} l’unité • ${money(num(x.price)*num(x.qty))}</span><button class="remove-link" onclick="removeCartItem('${x.id}')">Supprimer</button></div><div class="cart-qty"><button onclick="changeQty('${x.id}',-1)">−</button><input value="${x.qty}" type="number" min="1" max="999" inputmode="numeric" onchange="setCartQty('${x.id}',this.value)"><button onclick="changeQty('${x.id}',1)">+</button></div></div>`).join('')}</div>
     <div class="delivery-choice">${settings.delivery_enabled?`<button class="choice-card ${currentOrderMode==='delivery'?'active':''}" onclick="setOrderMode('delivery')"><strong>Livraison</strong><span>${money(settings.delivery_fee)} • ${settings.delivery_eta_min}–${settings.delivery_eta_max} min</span></button>`:''}${settings.pickup_enabled?`<button class="choice-card ${currentOrderMode==='pickup'?'active':''}" onclick="setOrderMode('pickup')"><strong>Retrait au LTD</strong><span>Sans frais de livraison</span></button>`:''}</div>
     <div class="loyalty-box"><strong>${pts} / ${settings.loyalty_reward_points} points fidélité</strong><div>${eligible?'Vous pouvez utiliser votre livraison offerte.':`Encore ${Math.max(0,num(settings.loyalty_reward_points)-pts)} points avant votre prochaine livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,(pts/Math.max(1,num(settings.loyalty_reward_points)))*100)}%"></span></div></div>
+    ${!demo.profile?`<div class="form-group"><label>Prénom & nom</label><input id="orderGuestName" autocomplete="off" placeholder="Votre nom"></div>`:''}
     ${currentOrderMode==='delivery'?`<div class="form-group"><label>Lieu de livraison</label><input id="deliveryAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Ex : domicile, entreprise, parking…"></div>`:''}
     <div class="form-group"><label>Numéro de téléphone</label><input id="orderPhone" value="${esc(demo.profile?.phone||'')}" placeholder="Votre numéro"></div>
     <div class="form-group"><label>Précision pour l’équipe</label><textarea id="orderNote" placeholder="Ex : appelez-moi en arrivant, entrée arrière…"></textarea></div>
@@ -568,17 +570,15 @@ window.applyPromoCode=async()=>{
 };
 
 window.showGuestChoice=()=>{
-  openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">FINALISER LA COMMANDE</span><h3>Comment voulez-vous continuer ?</h3><p class="page-intro">Vous pouvez commander sans compte, mais cette commande ne vous donnera aucun point de fidélité.</p><div class="guest-choice-grid"><button class="guest-choice-card primary-choice" onclick="showAuth('login')"><i data-lucide="log-in"></i><div><strong>Se connecter</strong><span>Profiter de votre compte et de vos points fidélité.</span></div></button><button class="guest-choice-card" onclick="showGuestCheckout()"><i data-lucide="shopping-bag"></i><div><strong>Continuer sans compte</strong><span>Commander directement, sans points de fidélité.</span></div></button></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour au panier</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">FINALISER LA COMMANDE</span><h3>Comment voulez-vous continuer ?</h3><p class="page-intro">Vous pouvez continuer sans compte, mais cette commande ne vous donnera aucun point de fidélité.</p><div class="guest-choice-grid"><button class="guest-choice-card primary-choice" onclick="showAuth('login')"><i data-lucide="log-in"></i><div><strong>Se connecter</strong><span>Profiter de votre compte et de vos points fidélité.</span></div></button><button class="guest-choice-card" onclick="submitGuestOrder()"><i data-lucide="shopping-bag"></i><div><strong>Continuer sans compte</strong><span>Envoyer directement la commande avec les informations déjà renseignées.</span></div></button></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour au panier</button></div>`);
   iconRefresh();
 };
 
-window.showGuestCheckout=()=>{
-  openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">COMMANDE SANS COMPTE</span><h3>Vos informations</h3><p class="page-intro">Aucun compte n’est nécessaire. Cette commande ne rapporte simplement aucun point fidélité.</p><div class="form-group"><label>Prénom & nom</label><input id="guestName" autocomplete="off" placeholder="Votre nom"></div><div class="form-group"><label>Numéro de téléphone</label><input id="guestPhone" autocomplete="off" placeholder="Votre numéro"></div>${currentOrderMode==='delivery'?`<div class="form-group"><label>Lieu de livraison</label><input id="guestAddress" autocomplete="off" placeholder="Ex : domicile, entreprise, parking…"></div>`:''}<div class="form-group"><label>Précision pour l’équipe</label><textarea id="guestNote" placeholder="Ex : appelez-moi en arrivant…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour</button><button class="btn primary" onclick="submitGuestOrder()">Envoyer la commande</button></div>`);
-};
 window.submitGuestOrder=async()=>{
-  const name=($('#guestName')?.value||'').trim(),phone=($('#guestPhone')?.value||'').trim();
-  const address=currentOrderMode==='delivery'?($('#guestAddress')?.value||'').trim():settings.address;
-  const note=($('#guestNote')?.value||'').trim();
+  const draft=guestOrderDraft||{};
+  const name=String(draft.name||'').trim(),phone=String(draft.phone||'').trim();
+  const address=currentOrderMode==='delivery'?String(draft.address||'').trim():settings.address;
+  const note=String(draft.note||'').trim();
   if(!name)return toast('Indiquez votre prénom et nom.');
   if(!phone)return toast('Indiquez un numéro de téléphone.');
   if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
@@ -588,7 +588,7 @@ window.submitGuestOrder=async()=>{
     const {data,error}=await sb.rpc('create_guest_order',{p_items:items,p_fulfillment:currentOrderMode,p_address:address,p_phone:phone,p_customer_name:name,p_note:note,p_promo_code:promoCode});
     if(error){console.error(error);return toast(error.message||'La commande n’a pas pu être créée.')}
     await invokeDiscordOrders({action:'created',public_code:data});
-    demo.cart=[];currentPromo=null;updateCartCount();
+    demo.cart=[];currentPromo=null;guestOrderDraft=null;updateCartCount();
     openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">COMMANDE ENVOYÉE</span><h3>#${esc(data)}</h3><p class="page-intro">Votre commande a bien été transmise au LTD. Gardez ce numéro si besoin.</p><div class="notice"><i data-lucide="badge-check"></i><div><strong>Sans compte</strong><span>Aucun point fidélité n’est ajouté sur cette commande.</span></div></div><div class="modal-actions"><button class="btn primary" onclick="closeModal();nav('home')">Terminer</button></div>`);
     iconRefresh();
   }else{
@@ -598,8 +598,18 @@ window.submitGuestOrder=async()=>{
 
 window.checkout=async()=>{
   if(!settings.business_open)return toast('Les commandes sont momentanément fermées.');
-  if(!demo.profile)return showGuestChoice();
   const subtotal=cartSubtotal(); if(subtotal<num(settings.min_order))return toast(`Minimum de commande : ${money(settings.min_order)}.`);
+  if(!demo.profile){
+    const name=($('#orderGuestName')?.value||'').trim();
+    const phone=($('#orderPhone')?.value||'').trim();
+    const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address;
+    const note=($('#orderNote')?.value||'').trim();
+    if(!name)return toast('Indiquez votre prénom et nom.');
+    if(!phone)return toast('Indiquez un numéro de téléphone.');
+    if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
+    guestOrderDraft={name,phone,address,note};
+    return showGuestChoice();
+  }
   const phone=($('#orderPhone')?.value||demo.profile.phone||'').trim(); if(!phone)return toast('Indiquez un numéro de téléphone.');
   const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address; if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
   const note=($('#orderNote')?.value||'').trim(), redeem=Boolean($('#redeemPoints')?.checked), promoCode=currentPromo?.code||null;
@@ -791,7 +801,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.8.0';
+window.LTD_BUILD='8.9.1';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
