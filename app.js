@@ -940,10 +940,52 @@ window.toggleProduct=async(id,current)=>{if(hasSupabase){const{error}=await sb.f
 async function adminPacks(){
   const list=(await getProducts(true)).filter(p=>p.is_pack);demo.products=await getProducts(true);
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Packs</h3><button class="btn primary full" style="margin-bottom:12px" onclick="adminPack()"><i data-lucide="plus"></i> Nouveau pack</button><div class="search-wrap admin-search"><i data-lucide="search"></i><input id="adminPackSearch" placeholder="Rechercher un pack…"></div><div id="adminPackList" class="stack"></div>`);
-  const draw=()=>{const q=($('#adminPackSearch')?.value||'').trim().toLowerCase();const rows=list.filter(p=>!q||p.name.toLowerCase().includes(q));$('#adminPackList').innerHTML=rows.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'📦')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)}${p.is_pack_of_month?' • PACK DU MOIS':''}</p></div><div class="catalog-actions"><button onclick="editAdminPack('${p.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')||'<div class="empty">Aucun pack trouvé.</div>';iconRefresh();};
+  const draw=()=>{const q=($('#adminPackSearch')?.value||'').trim().toLowerCase();const rows=list.filter(p=>!q||p.name.toLowerCase().includes(q));$('#adminPackList').innerHTML=rows.map(p=>`<div class="catalog-row"><div class="catalog-icon">${esc(p.emoji||'📦')}</div><div><strong>${esc(p.name)}</strong><p>${money(p.price)}${p.is_pack_of_month?' • PACK DU MOIS':''}</p></div><div class="catalog-actions"><button onclick="editAdminPack('${p.id}')" title="Modifier"><i data-lucide="pencil"></i></button><button onclick="openPackSettings('${p.id}')" title="Réglages"><i data-lucide="settings-2"></i></button></div></div>`).join('')||'<div class="empty">Aucun pack trouvé.</div>';iconRefresh();};
   $('#adminPackSearch')?.addEventListener('input',draw);draw();iconRefresh();
 }
 window.editAdminPack=async id=>{const all=await getProducts(true);demo.products=all;const p=all.find(x=>String(x.id)===String(id));if(p)adminPack(p)};
+window.openPackSettings=async id=>{
+  const all=await getProducts(true);demo.products=all;
+  const p=all.find(x=>String(x.id)===String(id)&&x.is_pack);if(!p)return;
+  openModal(`<button class="icon-btn close" onclick="adminPacks()">×</button><span class="eyebrow">RÉGLAGES DU PACK</span><h3>${esc(p.name)}</h3>
+    <div class="pack-settings-grid">
+      <button class="pack-setting-card ${p.is_pack_of_month?'active':''}" onclick="setPackMonth('${p.id}',${p.is_pack_of_month?'true':'false'})">
+        <i data-lucide="star"></i><div><strong>${p.is_pack_of_month?'Retirer du Pack du mois':'Mettre en Pack du mois'}</strong><span>${p.is_pack_of_month?'Ce pack est actuellement mis en avant.':'Met ce pack en avant sur l’accueil.'}</span></div>
+      </button>
+      <button class="pack-setting-card ${p.available!==false?'active':''}" onclick="setPackAvailability('${p.id}',${p.available!==false?'true':'false'})">
+        <i data-lucide="${p.available!==false?'eye':'eye-off'}"></i><div><strong>${p.available!==false?'Rendre indisponible':'Rendre disponible'}</strong><span>${p.available!==false?'Les clients peuvent actuellement le commander.':'Le pack est actuellement masqué à la vente.'}</span></div>
+      </button>
+      <button class="pack-setting-card ${p.show_pack_contents!==false?'active':''}" onclick="setPackContentVisibility('${p.id}',${p.show_pack_contents!==false?'true':'false'})">
+        <i data-lucide="${p.show_pack_contents!==false?'list-tree':'list-x'}"></i><div><strong>${p.show_pack_contents!==false?'Masquer le contenu':'Afficher le contenu'}</strong><span>${p.show_pack_contents!==false?'Les clients voient le détail des articles.':'Les clients ne voient pas le détail des articles.'}</span></div>
+      </button>
+      <button class="pack-setting-card" onclick="editAdminPack('${p.id}')">
+        <i data-lucide="pencil"></i><div><strong>Modifier le pack</strong><span>Nom, prix, description, emoji et contenu.</span></div>
+      </button>
+    </div>`);
+  iconRefresh();
+};
+window.setPackMonth=async(id,current)=>{
+  if(hasSupabase){
+    if(!current){const{error:clear}=await sb.from('products').update({is_pack_of_month:false}).eq('is_pack',true);if(clear)return toast(clear.message)}
+    const{error}=await sb.from('products').update({is_pack_of_month:!current}).eq('id',id);if(error)return toast(error.message);
+  }else{
+    demo.products.forEach(p=>{if(p.is_pack)p.is_pack_of_month=false});
+    const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.is_pack_of_month=!current;
+    storageSet(LS.products,demo.products);
+  }
+  toast(!current?'Pack du mois activé.':'Pack du mois retiré.');await renderHome();openPackSettings(id);
+};
+window.setPackAvailability=async(id,current)=>{
+  if(hasSupabase){const{error}=await sb.from('products').update({available:!current}).eq('id',id);if(error)return toast(error.message)}
+  else{const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.available=!current;storageSet(LS.products,demo.products)}
+  toast(!current?'Pack disponible.':'Pack indisponible.');openPackSettings(id);
+};
+window.setPackContentVisibility=async(id,current)=>{
+  if(hasSupabase){const{error}=await sb.from('products').update({show_pack_contents:!current}).eq('id',id);if(error)return toast(error.message)}
+  else{const p=demo.products.find(x=>String(x.id)===String(id));if(p)p.show_pack_contents=!current;storageSet(LS.products,demo.products)}
+  toast(!current?'Contenu du pack visible.':'Contenu du pack masqué.');openPackSettings(id);
+};
+
 async function adminPack(pack=null){
   const all=await getProducts(true);demo.products=all;
   const base=all.filter(p=>!p.is_pack&&p.active!==false);
