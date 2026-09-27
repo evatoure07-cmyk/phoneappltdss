@@ -449,7 +449,7 @@ async function renderShop(){
   await getSettings();
   const [all,promos]=await Promise.all([getProducts(),getPromotions()]);
   demo.products=all;
-  const cats=['Tous','Populaires','Nouveauté'];
+  const cats=['Tous','Populaires','Nouveauté','Packs'];
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   renderShopProducts();
   const auto=promos.find(p=>p.auto_apply);
@@ -463,7 +463,9 @@ function renderShopProducts(){
   const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr-FR');
   const nq=normalize(q);
   const list=(demo.products||[]).filter(p=>{
-    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new);
+    if(p.available===false)return false;
+    if(p.stock!==null&&p.stock!==undefined&&num(p.stock)<=0)return false;
+    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new)||(activeCategory==='Packs'&&p.is_pack);
     if(!cat)return false;
     const text=normalize(`${p.name} ${p.description||''} ${p.category||''}`);
     return !nq||text.includes(nq);
