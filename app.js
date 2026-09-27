@@ -536,6 +536,7 @@ function renderCartModal(){
     <div class="totals" id="cartTotals"></div>
     ${num(settings.min_order)>0?`<p class="subtle">Minimum de commande : ${money(settings.min_order)}</p>`:''}
     <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Continuer</button><button class="btn primary" id="checkoutBtn" onclick="checkout()" ${settings.business_open?'':'disabled'}>${settings.business_open?'Valider la commande':'Commandes fermées'}</button></div>`);
+  if(!demo.profile) $('.loyalty-box')?.classList.add('hidden');
   refreshCartTotals();
 }
 window.setOrderMode=mode=>{currentOrderMode=mode;renderCartModal()};
@@ -555,9 +556,32 @@ window.applyPromoCode=async()=>{
   currentPromo=p;renderCartModal();toast('Code promo appliqué.');
 };
 
+window.showGuestCheckout=()=>{
+  openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">COMMANDE SANS COMPTE</span><h3>Vos informations</h3><p class="page-intro">Aucun compte n’est nécessaire. Cette commande ne rapporte simplement aucun point fidélité.</p><div class="form-group"><label>Prénom & nom</label><input id="guestName" autocomplete="off" placeholder="Votre nom"></div><div class="form-group"><label>Numéro de téléphone</label><input id="guestPhone" autocomplete="off" placeholder="Votre numéro"></div>${currentOrderMode==='delivery'?`<div class="form-group"><label>Lieu de livraison</label><input id="guestAddress" autocomplete="off" placeholder="Ex : domicile, entreprise, parking…"></div>`:''}<div class="form-group"><label>Précision pour l’équipe</label><textarea id="guestNote" placeholder="Ex : appelez-moi en arrivant…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour</button><button class="btn primary" onclick="submitGuestOrder()">Envoyer la commande</button></div>`);
+};
+window.submitGuestOrder=async()=>{
+  const name=($('#guestName')?.value||'').trim(),phone=($('#guestPhone')?.value||'').trim();
+  const address=currentOrderMode==='delivery'?($('#guestAddress')?.value||'').trim():settings.address;
+  const note=($('#guestNote')?.value||'').trim();
+  if(!name)return toast('Indiquez votre prénom et nom.');
+  if(!phone)return toast('Indiquez un numéro de téléphone.');
+  if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
+  const items=demo.cart.map(x=>({product_id:x.id,quantity:x.qty}));
+  const promoCode=currentPromo?.code||null;
+  if(hasSupabase){
+    const {data,error}=await sb.rpc('create_guest_order',{p_items:items,p_fulfillment:currentOrderMode,p_address:address,p_phone:phone,p_customer_name:name,p_note:note,p_promo_code:promoCode});
+    if(error){console.error(error);return toast(error.message||'La commande n’a pas pu être créée.')}
+    demo.cart=[];currentPromo=null;updateCartCount();
+    openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">COMMANDE ENVOYÉE</span><h3>#${esc(data)}</h3><p class="page-intro">Votre commande a bien été transmise au LTD. Gardez ce numéro si besoin.</p><div class="notice"><i data-lucide="badge-check"></i><div><strong>Sans compte</strong><span>Aucun point fidélité n’est ajouté sur cette commande.</span></div></div><div class="modal-actions"><button class="btn primary" onclick="closeModal();nav('home')">Terminer</button></div>`);
+    iconRefresh();
+  }else{
+    toast('La base centrale est nécessaire pour envoyer une commande.');
+  }
+};
+
 window.checkout=async()=>{
   if(!settings.business_open)return toast('Les commandes sont momentanément fermées.');
-  if(!demo.profile)return showAuth('signup');
+  if(!demo.profile)return showGuestCheckout();
   const subtotal=cartSubtotal(); if(subtotal<num(settings.min_order))return toast(`Minimum de commande : ${money(settings.min_order)}.`);
   const phone=($('#orderPhone')?.value||demo.profile.phone||'').trim(); if(!phone)return toast('Indiquez un numéro de téléphone.');
   const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address; if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
