@@ -567,6 +567,11 @@ window.applyPromoCode=async()=>{
   currentPromo=p;renderCartModal();toast('Code promo appliqué.');
 };
 
+window.showGuestChoice=()=>{
+  openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">FINALISER LA COMMANDE</span><h3>Comment voulez-vous continuer ?</h3><p class="page-intro">Vous pouvez commander sans compte, mais cette commande ne vous donnera aucun point de fidélité.</p><div class="guest-choice-grid"><button class="guest-choice-card primary-choice" onclick="showAuth('login')"><i data-lucide="log-in"></i><div><strong>Se connecter</strong><span>Profiter de votre compte et de vos points fidélité.</span></div></button><button class="guest-choice-card" onclick="showGuestCheckout()"><i data-lucide="shopping-bag"></i><div><strong>Continuer sans compte</strong><span>Commander directement, sans points de fidélité.</span></div></button></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour au panier</button></div>`);
+  iconRefresh();
+};
+
 window.showGuestCheckout=()=>{
   openModal(`<button class="icon-btn close" onclick="renderCartModal()">×</button><span class="eyebrow">COMMANDE SANS COMPTE</span><h3>Vos informations</h3><p class="page-intro">Aucun compte n’est nécessaire. Cette commande ne rapporte simplement aucun point fidélité.</p><div class="form-group"><label>Prénom & nom</label><input id="guestName" autocomplete="off" placeholder="Votre nom"></div><div class="form-group"><label>Numéro de téléphone</label><input id="guestPhone" autocomplete="off" placeholder="Votre numéro"></div>${currentOrderMode==='delivery'?`<div class="form-group"><label>Lieu de livraison</label><input id="guestAddress" autocomplete="off" placeholder="Ex : domicile, entreprise, parking…"></div>`:''}<div class="form-group"><label>Précision pour l’équipe</label><textarea id="guestNote" placeholder="Ex : appelez-moi en arrivant…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="renderCartModal()">Retour</button><button class="btn primary" onclick="submitGuestOrder()">Envoyer la commande</button></div>`);
 };
@@ -593,7 +598,7 @@ window.submitGuestOrder=async()=>{
 
 window.checkout=async()=>{
   if(!settings.business_open)return toast('Les commandes sont momentanément fermées.');
-  if(!demo.profile)return showGuestCheckout();
+  if(!demo.profile)return showGuestChoice();
   const subtotal=cartSubtotal(); if(subtotal<num(settings.min_order))return toast(`Minimum de commande : ${money(settings.min_order)}.`);
   const phone=($('#orderPhone')?.value||demo.profile.phone||'').trim(); if(!phone)return toast('Indiquez un numéro de téléphone.');
   const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address; if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
