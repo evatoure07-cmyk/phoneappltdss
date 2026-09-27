@@ -264,3 +264,16 @@ html[data-theme="light"] .field-label{color:#655846}
 .pack-setting-card strong{display:block;font-size:12px}
 .pack-setting-card span{display:block;color:var(--muted);font-size:9px;margin-top:3px;line-height:1.4}
 .pack-setting-card.active{border-color:rgba(217,169,78,.45);background:rgba(217,169,78,.07)}
+
+
+/* ===== V8.9 — guest checkout choice ===== */
+.guest-choice-grid{display:grid;gap:10px;margin-top:16px}
+.guest-choice-card{
+  width:100%;border:1px solid var(--line);background:var(--surface);color:var(--cream);
+  border-radius:16px;padding:15px;display:grid;grid-template-columns:40px 1fr;gap:12px;
+  align-items:center;text-align:left;cursor:pointer
+}
+.guest-choice-card svg{width:21px;color:var(--gold)}
+.guest-choice-card strong{display:block;font-size:13px}
+.guest-choice-card span{display:block;color:var(--muted);font-size:10px;line-height:1.45;margin-top:3px}
+.guest-choice-card.primary-choice{border-color:rgba(217,169,78,.55);background:rgba(217,169,78,.08)}
