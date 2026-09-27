@@ -237,3 +237,17 @@ html[data-theme="light"] .nav-item{color:#8a7b68}
 html[data-theme="light"] .checkbox-row,
 html[data-theme="light"] .form-group label,
 html[data-theme="light"] .field-label{color:#655846}
+
+
+/* ===== V8.5 — pack editor / descriptions ===== */
+.product-description{height:auto!important;min-height:34px;max-height:none!important;overflow:visible!important}
+.empty-description{opacity:.7;font-style:italic}
+.pack-collapse-toggle{
+  width:100%;border:1px solid var(--line);background:var(--surface);color:var(--cream);
+  border-radius:15px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;text-align:left;cursor:pointer
+}
+.pack-collapse-toggle span>strong{display:block;font-size:12px;margin-top:3px}
+.pack-collapse-toggle svg{width:18px;color:var(--gold)}
+.pack-items-editor{max-height:2000px;opacity:1;overflow:hidden;transition:max-height .25s ease,opacity .2s ease}
+.pack-items-editor.collapsed{max-height:0;opacity:0}
