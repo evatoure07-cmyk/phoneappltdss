@@ -360,13 +360,10 @@ async function renderHome(){
   const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
   demo.products=products;
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
-  const month=products.filter(p=>p.popular && p.available!==false && !p.is_pack).slice(0,4);
-  const monthFallback=month.length?month:products.filter(p=>p.available!==false && !p.is_pack).slice(0,4);
-  $('#homeMonthProducts').innerHTML=monthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Les produits du mois seront bientôt annoncés.</div>';
-  const featuredMonth=products.filter(p=>p.is_product_of_month && p.available!==false && !p.is_pack).slice(0,1);
-  const featuredMonthFallback=featuredMonth.length?featuredMonth:products.filter(p=>p.available!==false && !p.is_pack).slice(0,1);
-  $('#homeNewProducts').innerHTML=featuredMonthFallback.map(homeProductHTML).join('')||'<div class="empty wide-empty">Le produit du mois sera bientôt annoncé.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
+  $('#homeMonthProducts').innerHTML=packMonth?homeProductHTML(packMonth):'<div class="empty wide-empty">Aucun pack du mois n’est sélectionné pour le moment.</div>';
+  const featuredMonth=products.find(p=>p.is_product_of_month && p.available!==false && !p.is_pack);
+  $('#homeNewProducts').innerHTML=featuredMonth?homeProductHTML(featuredMonth):'<div class="empty wide-empty">Aucun produit du mois n’est sélectionné pour le moment.</div>';
   if($('#packMonthKicker')) $('#packMonthKicker').textContent=packMonth?'PACK DU MOIS':'PACKS & OFFRES';
   if($('#packMonthDesc')) $('#packMonthDesc').textContent=packMonth?`${packMonth.name} — ${packMonth.description||'Découvrez la sélection du mois.'}`:'Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.';
   if($('#contactsList')) $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
@@ -445,26 +442,39 @@ $('#businessStatusButton').addEventListener('click',()=>toast(settings.business_
 document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');if(a && !validPhone(a.dataset.phone)){e.preventDefault();toast('Ce numéro sera bientôt renseigné.')}});
 
 async function renderShop(){
-  await getSettings(); const [all,promos]=await Promise.all([getProducts(),getPromotions()]); demo.products=all;
+  await getSettings();
+  const [all,promos]=await Promise.all([getProducts(),getPromotions()]);
+  demo.products=all;
   const cats=['Tous','Populaires','Nouveauté'];
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
-  const q=($('#productSearch').value||'').trim().toLowerCase();
-  const list=all.filter(p=>{
-    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new)||p.category===activeCategory;
-    const text=`${p.name} ${p.description||''} ${p.category||''}`.toLowerCase(); return cat&&text.includes(q);
+  renderShopProducts();
+  const auto=promos.find(p=>p.auto_apply);
+  $('#promoStrip').classList.toggle('hidden',!auto);
+  if(auto)$('#promoStrip').innerHTML=`<strong>${esc(auto.name)}</strong> — ${promoDescription(auto)}`;
+  applySettingsToUI();updateCartCount();iconRefresh();
+}
+function renderShopProducts(){
+  const input=$('#productSearch');
+  const q=String(input?.value||'').trim().toLocaleLowerCase('fr-FR');
+  const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr-FR');
+  const nq=normalize(q);
+  const list=(demo.products||[]).filter(p=>{
+    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new);
+    if(!cat)return false;
+    const text=normalize(`${p.name} ${p.description||''} ${p.category||''}`);
+    return !nq||text.includes(nq);
   });
   $('#productGrid').innerHTML=list.map(productHTML).join('')||'<div class="empty" style="grid-column:1/-1">Aucun article ne correspond à votre recherche.</div>';
-  const auto=promos.find(p=>p.auto_apply); $('#promoStrip').classList.toggle('hidden',!auto); if(auto)$('#promoStrip').innerHTML=`<strong>${esc(auto.name)}</strong> — ${promoDescription(auto)}`;
-  applySettingsToUI(); updateCartCount(); iconRefresh();
+  iconRefresh();
 }
 function productHTML(p){
   const available=p.available!==false && (p.stock===null||p.stock===undefined||num(p.stock)>0);
   const badge=p.is_product_of_month?'Produit du mois':(p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':'')));
   return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${available?'':'unavailable'}">${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4><p>${esc(p.description||'')}</p><div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
 }
-$('#productSearch').addEventListener('input',renderShop);
+$('#productSearch')?.addEventListener('input',renderShopProducts);
 document.addEventListener('click',e=>{
-  const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShop();return}
+  const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShopProducts();$('[data-cat]').forEach(x=>x.classList.toggle('active',x.dataset.cat===activeCategory));return}
   const m=e.target.closest('[data-qminus]');if(m){adjustCardQty(m.dataset.qminus,-1);return}
   const p=e.target.closest('[data-qplus]');if(p){adjustCardQty(p.dataset.qplus,1);return}
   const info=e.target.closest('[data-packinfo]');if(info){showPackInfo(info.dataset.packinfo);return}
