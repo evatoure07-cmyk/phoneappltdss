@@ -467,3 +467,201 @@ html[data-theme="light"] .loyalty-card-bottom small,
 html[data-theme="light"] .loyalty-card-next{color:#4f3520}
 html[data-theme="light"] .tracking-driver,
 html[data-theme="light"] .tracking-dot{background:#ead4b7}
+
+
+/* ===== V8.11.3 — light theme soft neutral redesign ===== */
+html[data-theme="light"]{
+  --bg:#f4eee6;
+  --surface:#fbf7f1;
+  --surface2:#eee5da;
+  --surface3:#e4d7c8;
+  --line:rgba(103,91,79,.14);
+  --gold:#b58a50;
+  --gold2:#9a7243;
+  --cream:#665b50;
+  --muted:#988b7e;
+  --danger:#b85c58;
+  --ok:#6f9278;
+  --warn:#b58a50;
+  --blue:#788da8;
+  --shadow:0 14px 34px rgba(83,72,61,.08)
+}
+
+html[data-theme="light"] body{
+  background:linear-gradient(180deg,#faf7f2 0%,#f4eee6 48%,#efe7dd 100%)!important;
+  color:#665b50!important
+}
+
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] strong{
+  color:#675a4d
+}
+
+html[data-theme="light"] p,
+html[data-theme="light"] span,
+html[data-theme="light"] small,
+html[data-theme="light"] .subtle{
+  color:#95887b
+}
+
+html[data-theme="light"] .topbar,
+html[data-theme="light"] .bottom-nav{
+  background:rgba(250,247,242,.97)!important;
+  border-color:rgba(103,91,79,.10)!important
+}
+
+html[data-theme="light"] .modal,
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .catalog-row,
+html[data-theme="light"] .order-card,
+html[data-theme="light"] .mini-info,
+html[data-theme="light"] .account-row,
+html[data-theme="light"] .guest-choice-card,
+html[data-theme="light"] .pack-setting-card,
+html[data-theme="light"] .pack-collapse-toggle,
+html[data-theme="light"] .staff-home-status,
+html[data-theme="light"] .admin-history-item,
+html[data-theme="light"] .info-card,
+html[data-theme="light"] .utility-tile{
+  background:#fbf7f1!important;
+  border-color:rgba(103,91,79,.12)!important;
+  color:#675a4d!important;
+  box-shadow:0 10px 24px rgba(83,72,61,.05)!important
+}
+
+html[data-theme="light"] .editorial-hero{
+  background:linear-gradient(145deg,#d7c3a8,#cdb495)!important;
+  border-color:rgba(122,103,80,.12)!important
+}
+
+html[data-theme="light"] .editorial-hero h2,
+html[data-theme="light"] .editorial-hero p,
+html[data-theme="light"] .editorial-hero span,
+html[data-theme="light"] .editorial-hero .editorial-kicker{
+  color:#fffaf5!important
+}
+
+html[data-theme="light"] .editorial-hero .editorial-wordmark{
+  color:rgba(255,255,255,.12)!important
+}
+
+html[data-theme="light"] .editorial-primary{
+  background:#fffaf5!important;
+  color:#8d7355!important;
+  border-color:rgba(255,255,255,.45)!important
+}
+
+html[data-theme="light"] .editorial-secondary{
+  background:rgba(255,255,255,.15)!important;
+  color:#fffaf5!important;
+  border-color:rgba(255,255,255,.30)!important
+}
+
+html[data-theme="light"] .editorial-offer,
+html[data-theme="light"] .announcement.featured,
+html[data-theme="light"] .recruitment-panel{
+  background:linear-gradient(135deg,#e5d3bb,#dbc3a4)!important;
+  color:#75624f!important
+}
+
+html[data-theme="light"] .editorial-offer h3,
+html[data-theme="light"] .editorial-offer p,
+html[data-theme="light"] .editorial-offer span,
+html[data-theme="light"] .announcement.featured h3,
+html[data-theme="light"] .announcement.featured p{
+  color:#75624f!important
+}
+
+html[data-theme="light"] .form-group input,
+html[data-theme="light"] .form-group textarea,
+html[data-theme="light"] .form-group select,
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .qty-input,
+html[data-theme="light"] .cart-qty input,
+html[data-theme="light"] .promo-row input,
+html[data-theme="light"] .search-wrap,
+html[data-theme="light"] .search-wrap input{
+  background:#fffdfa!important;
+  color:#6f6256!important;
+  border-color:rgba(103,91,79,.13)!important
+}
+
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder{
+  color:#b0a397!important
+}
+
+html[data-theme="light"] .btn.primary,
+html[data-theme="light"] .primary-action{
+  background:linear-gradient(135deg,#c6a779,#b58a50)!important;
+  color:#fffaf5!important;
+  border-color:transparent!important
+}
+
+html[data-theme="light"] .btn.ghost,
+html[data-theme="light"] .icon-btn,
+html[data-theme="light"] .order-actions button{
+  background:#f4ece3!important;
+  color:#76695d!important;
+  border-color:rgba(103,91,79,.12)!important
+}
+
+html[data-theme="light"] .nav-item{
+  color:#a09386!important
+}
+html[data-theme="light"] .nav-item.active{
+  color:#a47c49!important
+}
+
+html[data-theme="light"] .product-visual{
+  background:linear-gradient(145deg,#f0e6db,#e6d8c8)!important
+}
+
+html[data-theme="light"] .stock-badge,
+html[data-theme="light"] .status-pill,
+html[data-theme="light"] .home-status-pill{
+  background:#f4ece3!important;
+  color:#817366!important;
+  border-color:rgba(103,91,79,.12)!important
+}
+
+html[data-theme="light"] .premium-promo-banner,
+html[data-theme="light"] .promo-strip{
+  background:linear-gradient(135deg,#f0dfc7,#e8d2b3)!important;
+  border-color:rgba(181,138,80,.18)!important
+}
+
+html[data-theme="light"] .promo-banner-copy strong,
+html[data-theme="light"] .promo-banner-copy span{
+  color:#786754!important
+}
+
+html[data-theme="light"] .loyalty-visual-card{
+  background:linear-gradient(135deg,#d7bea0,#c9aa84 60%,#b89468 140%)!important;
+  color:#fffaf5!important;
+  border-color:rgba(149,115,73,.15)!important
+}
+
+html[data-theme="light"] .loyalty-visual-card strong,
+html[data-theme="light"] .loyalty-visual-card small,
+html[data-theme="light"] .loyalty-visual-card .loyalty-card-name{
+  color:#fffaf5!important
+}
+
+html[data-theme="light"] .tracking-driver,
+html[data-theme="light"] .tracking-dot{
+  background:#f5eee6!important
+}
+
+html[data-theme="light"] .tracking-copy strong{
+  color:#776a5e!important
+}
+
+html[data-theme="light"] .eyebrow,
+html[data-theme="light"] .section-kicker,
+html[data-theme="light"] .editorial-index{
+  color:#b58a50!important
+}
