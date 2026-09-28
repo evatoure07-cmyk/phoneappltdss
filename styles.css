@@ -190,24 +190,26 @@ body.staff-mode #homeView .client-home-section{display:none!important}body.staff
 .partnership-meta svg{width:13px;height:13px;color:var(--gold)}
 
 html[data-theme="light"]{
-  --bg:#f7f1e6;--surface:#fffaf1;--surface2:#f1e7d6;--surface3:#eadbc4;--line:#d8c6a8;
-  --gold:#b47b1f;--gold2:#8c5c12;--cream:#2a2117;--muted:#766957;--danger:#b84242;--ok:#2c8a59;
-  --warn:#a96c18;--blue:#406cae;--shadow:0 18px 45px rgba(92,65,25,.13)
+  --bg:#f3e8d7;--surface:#ead9c3;--surface2:#e1c9ab;--surface3:#d7b98f;--line:rgba(88,58,30,.16);
+  --gold:#b8843a;--gold2:#8f6229;--cream:#332319;--muted:#7b6855;--danger:#b74a43;--ok:#4b8b62;
+  --warn:#a56d2c;--blue:#55729b;--shadow:0 16px 38px rgba(67,43,22,.10)
 }
 html[data-theme="light"] body{
-  background:radial-gradient(circle at 50% -15%,#fff8ea 0,#f7f1e6 46%);
+  background:linear-gradient(180deg,#f7eddf 0%,#f3e8d7 46%,#efe0cc 100%);
   color:var(--cream)
 }
 html[data-theme="light"] .topbar{
-  background:rgba(247,241,230,.92);border-bottom-color:rgba(180,123,31,.18)
+  background:rgba(243,232,215,.94);border-bottom-color:rgba(117,78,35,.12)
 }
 html[data-theme="light"] .bottom-nav{
-  background:rgba(247,241,230,.96);border-top-color:rgba(180,123,31,.18)
+  background:rgba(239,224,204,.97);border-top-color:rgba(117,78,35,.12)
 }
 html[data-theme="light"] .sticky-head{
-  background:linear-gradient(180deg,var(--bg) 70%,rgba(247,241,230,0))
+  background:linear-gradient(180deg,var(--bg) 70%,rgba(243,232,215,0))
 }
-html[data-theme="light"] .modal{background:#fffaf1}
+html[data-theme="light"] .modal{
+  background:#f1e3d0;border-color:rgba(88,58,30,.14)
+}
 html[data-theme="light"] .form-group input,
 html[data-theme="light"] .form-group textarea,
 html[data-theme="light"] .form-group select,
@@ -216,27 +218,64 @@ html[data-theme="light"] .qty-input,
 html[data-theme="light"] .cart-qty input,
 html[data-theme="light"] .promo-row input,
 html[data-theme="light"] .permission-row{
-  background:#fffdf8;color:var(--cream)
+  background:#f7eddf;color:var(--cream);border-color:rgba(88,58,30,.14)
+}
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .catalog-row,
+html[data-theme="light"] .order-card,
+html[data-theme="light"] .mini-info,
+html[data-theme="light"] .account-row,
+html[data-theme="light"] .pack-setting-card,
+html[data-theme="light"] .guest-choice-card,
+html[data-theme="light"] .pack-collapse-toggle{
+  background:#ead9c3;border-color:rgba(88,58,30,.14);box-shadow:none
 }
 html[data-theme="light"] .product-visual{
-  background:linear-gradient(145deg,#f2e5d1,#eadbc4)
+  background:linear-gradient(145deg,#e5cfb3,#dcc09a)
 }
 html[data-theme="light"] .stock-badge{
-  background:rgba(255,250,241,.92);color:#5f503d
+  background:rgba(245,233,216,.94);color:#66513e
 }
 html[data-theme="light"] .staff-home-dashboard{
-  background:linear-gradient(145deg,#fff8eb,#f4ead9)
+  background:linear-gradient(145deg,#ead9c3,#e0c7a6)
 }
-html[data-theme="light"] .staff-home-status{background:#fffdf8;border-color:var(--line)}
-html[data-theme="light"] .home-shortcut{background:linear-gradient(145deg,#fffaf1,#f0e5d4)}
-html[data-theme="light"] .announcement.featured{background:linear-gradient(145deg,#fff5df,#f7eddd)}
-html[data-theme="light"] .recruitment-panel{background:linear-gradient(145deg,#fff7e8,#efe2cf)}
-html[data-theme="light"] .toast{background:#fff7e8}
-html[data-theme="light"] .modal-backdrop{background:rgba(68,48,22,.35)}
-html[data-theme="light"] .nav-item{color:#8a7b68}
+html[data-theme="light"] .staff-home-status{
+  background:#efe0cc;border-color:rgba(88,58,30,.14)
+}
+html[data-theme="light"] .home-shortcut{
+  background:linear-gradient(145deg,#ead9c3,#e2ccb0);border-color:rgba(88,58,30,.12)
+}
+html[data-theme="light"] .announcement.featured{
+  background:linear-gradient(145deg,#ead2ad,#dfbd8f)
+}
+html[data-theme="light"] .recruitment-panel{
+  background:linear-gradient(145deg,#ead8bf,#dfc3a0)
+}
+html[data-theme="light"] .toast{background:#e8d2b4;color:#332319}
+html[data-theme="light"] .modal-backdrop{background:rgba(73,48,27,.26)}
+html[data-theme="light"] .nav-item{color:#7c6958}
+html[data-theme="light"] .nav-item.active{color:#8f6229}
 html[data-theme="light"] .checkbox-row,
 html[data-theme="light"] .form-group label,
-html[data-theme="light"] .field-label{color:#655846}
+html[data-theme="light"] .field-label{color:#6d5947}
+html[data-theme="light"] .hero-card,
+html[data-theme="light"] .editorial-offer{
+  box-shadow:0 14px 30px rgba(67,43,22,.12)
+}
+html[data-theme="light"] .section-kicker,
+html[data-theme="light"] .eyebrow,
+html[data-theme="light"] .editorial-index{color:#9c6b2e}
+html[data-theme="light"] .btn.primary{
+  background:linear-gradient(135deg,#c6954a,#b67f31);color:#24170f
+}
+html[data-theme="light"] .btn.ghost,
+html[data-theme="light"] .icon-btn{
+  background:#efe1ce;border-color:rgba(88,58,30,.14);color:#3b291e
+}
+html[data-theme="light"] .home-status-pill,
+html[data-theme="light"] .status-pill{
+  background:#ead8bd;border-color:rgba(88,58,30,.15);color:#4a3526
+}
 
 
 /* ===== V8.5 — pack editor / descriptions ===== */
