@@ -73,6 +73,8 @@ let modalLocked = false;
 let passwordPromptedFor = null;
 let adminHistoryOrders=[];
 let adminHistoryExpanded=false;
+let reviewStaffCache=[];
+let currentReviewRating=5;
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -271,6 +273,15 @@ async function getPublicStaffRoster(){
   return data||[];
 }
 
+async function getReviewStaff(){
+  if(!hasSupabase){
+    return demo.profile?.staff_role?[{id:demo.profile.id,name:demo.profile.display_name,avatar_url:demo.profile.avatar_url||'',staff_role:demo.profile.staff_role}]:[];
+  }
+  const {data,error}=await sb.rpc('get_review_staff');
+  if(error){console.error(error);return []}
+  return data||[];
+}
+
 async function getSettings(){
   if(!hasSupabase) return settings;
   const {data,error}=await sb.from('site_settings').select('*').eq('id','main').maybeSingle();
@@ -307,12 +318,14 @@ async function getJobs(includeInactive=false){
 }
 
 function nav(name){
+  if(name==='contact'&&!uiIsStaff())name='reviews';
+  if(name==='reviews'&&uiIsStaff())name='contact';
   if(name==='admin'&&!uiCanManageAnything())return toast('Ce rôle n’a pas accès à l’administration.');
   if(name==='employees'&&!isDirection())return toast('La liste des employés est réservée à la direction.');
   if(name==='partnerships'&&!isDirection())return toast('Les demandes de partenariat sont réservées à la direction.');
-  $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
-  $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
+  $('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
+  $('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
+  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='reviews')renderReviews();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
@@ -356,6 +369,14 @@ $('#partnershipAdminSearch')?.addEventListener('input',renderPartnershipsPage);
 $('#themeToggle')?.addEventListener('click',toggleTheme);
 $('#refreshEmployees')?.addEventListener('click',renderEmployeesList);
 
+function updateRoleNavigation(){
+  const btn=$('#roleLastNav');if(!btn)return;
+  const staff=uiIsStaff();
+  btn.dataset.nav=staff?'contact':'reviews';
+  btn.innerHTML=staff?'<i data-lucide="users-round"></i><span>Direction</span>':'<i data-lucide="star"></i><span>Avis</span>';
+  iconRefresh();
+}
+
 function applySettingsToUI(){
   const open=Boolean(settings.business_open);
   $('#businessStatusMini') && ($('#businessStatusMini').textContent=open?'Ouvert':'Fermé');
@@ -385,6 +406,7 @@ async function renderHome(){
   if($('#packMonthDesc')) $('#packMonthDesc').textContent=packMonth?`${packMonth.name} — ${packMonth.description||'Découvrez la sélection du mois.'}`:'Des sélections prêtes à commander pour vos besoins du quotidien, vos équipes et vos événements.';
   if($('#contactsList')) $('#contactsList').innerHTML=contacts.map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
   document.body.classList.toggle('staff-mode',uiIsStaff());
+  updateRoleNavigation();
   $('#staffHomeDashboard')?.classList.toggle('hidden',!uiIsStaff());
   updatePreviewBanner();
   if(uiIsStaff()) await renderStaffHome();
@@ -427,13 +449,97 @@ async function renderRecruitment(){
   $('#jobsList').innerHTML=demo.jobs.map(j=>`<div class="job-card"><strong>${esc(j.title)}</strong><span>${esc(j.description)}</span><b class="recruit-status ${j.active!==false?'open':'closed'}">${j.active!==false?'RECRUTE':'NE RECRUTE PAS'}</b></div>`).join('')||'<div class="empty">Les postes seront bientôt renseignés.</div>';
   iconRefresh();
 }
-async function renderContact(){
-  await getSettings(); applySettingsToUI(); const [contacts,staffContacts]=await Promise.all([getContacts(),getPublicStaffContacts()]);
-  const staffRoles=new Set(staffContacts.map(c=>c.staff_role));
-  const manual=contacts.filter(c=>{const l=String(c.label||'').toLowerCase();return !(staffRoles.has('patron')&&['patron','gérant','gerant'].includes(l)) && !(staffRoles.has('copatron')&&['co-patronne','co-patron','copatronne','cogérante','cogerante'].includes(l));});
-  $('#contactsList').innerHTML=[...staffContacts,...manual].map(contactHTML).join('')||'<div class="empty">Contacts bientôt disponibles.</div>';
+async function renderReviews(){
+  if(isPreviewMode()&&previewRole==='customer'){
+    $('#reviewsList').innerHTML='<div class="empty"><strong>Aperçu client</strong><br><br>Les clients retrouvent ici leurs livraisons terminées et peuvent noter jusqu’à deux employés.</div>';return;
+  }
+  if(!demo.profile){
+    $('#reviewsList').innerHTML='<div class="empty">Connectez-vous pour laisser un avis après une livraison.<br><br><button class="btn primary" onclick="showAuth(\'login\')">Se connecter</button></div>';return;
+  }
+  if(isStaff())return nav('contact');
+
+  let orders=[],reviews=[],staff=[];
+  if(hasSupabase){
+    const [or,rv,st]=await Promise.all([
+      sb.from('orders').select('id,public_code,created_at,delivered_at,total,assigned_name').eq('user_id',demo.profile.id).eq('status','delivered').eq('fulfillment','delivery').order('delivered_at',{ascending:false}),
+      sb.from('delivery_reviews').select('*').eq('reviewer_id',demo.profile.id).order('created_at',{ascending:false}),
+      getReviewStaff()
+    ]);
+    orders=or.data||[];reviews=rv.data||[];staff=st||[];
+  }else{
+    orders=demo.orders.filter(o=>o.user_id===demo.profile.id&&o.status==='delivered'&&o.fulfillment==='delivery');
+    reviews=storageGet('ltd_delivery_reviews',[]);
+    staff=await getReviewStaff();
+  }
+  reviewStaffCache=staff;
+  const reviewByOrder=new Map(reviews.map(r=>[String(r.order_id),r]));
+  const staffById=new Map(staff.map(s=>[String(s.id),s.name]));
+  $('#reviewsList').innerHTML=orders.map(o=>{
+    const r=reviewByOrder.get(String(o.id));
+    if(r){
+      const names=[r.employee_1_id,r.employee_2_id].filter(Boolean).map(id=>staffById.get(String(id))||'Employé LTD');
+      return `<article class="review-order-card reviewed"><div class="review-order-top"><div><span class="order-code">#${esc(o.public_code||String(o.id).slice(-6).toUpperCase())}</span><strong>Merci pour votre avis</strong></div><span class="review-stars-static">${'★'.repeat(num(r.rating))}${'☆'.repeat(5-num(r.rating))}</span></div><p>${esc(names.join(' & '))}</p>${r.comment?`<div class="review-comment">“${esc(r.comment)}”</div>`:''}</article>`;
+    }
+    return `<article class="review-order-card"><div class="review-order-top"><div><span class="order-code">#${esc(o.public_code||String(o.id).slice(-6).toUpperCase())}</span><strong>Livraison du ${new Date(o.delivered_at||o.created_at).toLocaleDateString('fr-FR')}</strong></div><span>${money(o.total)}</span></div><p>${o.assigned_name?`Commande prise en charge par ${esc(o.assigned_name)}.`:'Votre commande a été livrée.'}</p><button class="btn primary full" onclick="openDeliveryReview('${o.id}','${esc(o.public_code||'')}')"><i data-lucide="star"></i> Laisser un avis</button></article>`;
+  }).join('')||'<div class="empty"><strong>Aucune livraison à noter.</strong><br><br>Après votre prochaine commande livrée, elle apparaîtra ici.</div>';
   iconRefresh();
 }
+
+window.openDeliveryReview=async(orderId,code)=>{
+  if(!demo.profile||isStaff())return;
+  if(!reviewStaffCache.length)reviewStaffCache=await getReviewStaff();
+  currentReviewRating=5;
+  const staff=reviewStaffCache;
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">AVIS LIVRAISON</span><h3>${code?'Commande #'+esc(code):'Votre livraison'}</h3><p class="page-intro">Qui vous a livré ? Sélectionnez une ou deux personnes, puis attribuez votre note.</p>
+    <div class="review-employee-grid">${staff.map(s=>`<label class="review-employee-card"><input type="checkbox" class="review-employee-check" value="${s.id}" onchange="limitReviewEmployees(this)"><span class="review-avatar">${s.avatar_url?`<img src="${esc(s.avatar_url)}" alt="">`:esc(String(s.name||'?').slice(0,1).toUpperCase())}</span><span><strong>${esc(s.name)}</strong><small>${esc(roleLabel(s.staff_role||'employee'))}</small></span><i data-lucide="check"></i></label>`).join('')||'<div class="empty">Aucun employé disponible.</div>'}</div>
+    <div class="review-selected-count" id="reviewSelectedCount">0 / 2 sélectionné</div>
+    <div class="review-rating"><span class="field-label">Votre note</span><div class="review-stars">${[1,2,3,4,5].map(n=>`<button type="button" class="active" data-rating="${n}" onclick="setReviewRating(${n})">★</button>`).join('')}</div><strong id="reviewRatingLabel">5 / 5</strong></div>
+    <div class="form-group"><label>Commentaire (facultatif)</label><textarea id="reviewComment" maxlength="500" placeholder="Un petit mot sur votre livraison…"></textarea></div>
+    <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="submitDeliveryReview('${orderId}')">Envoyer mon avis</button></div>`);
+  iconRefresh();
+};
+
+window.limitReviewEmployees=el=>{
+  const checked=$$('.review-employee-check:checked');
+  if(checked.length>2){el.checked=false;toast('Vous pouvez sélectionner maximum deux personnes.');}
+  const count=$$('.review-employee-check:checked').length;
+  if($('#reviewSelectedCount'))$('#reviewSelectedCount').textContent=`${count} / 2 sélectionné${count>1?'s':''}`;
+};
+
+window.setReviewRating=n=>{
+  currentReviewRating=Math.max(1,Math.min(5,num(n)));
+  $$('.review-stars button').forEach(b=>b.classList.toggle('active',num(b.dataset.rating)<=currentReviewRating));
+  if($('#reviewRatingLabel'))$('#reviewRatingLabel').textContent=`${currentReviewRating} / 5`;
+};
+
+window.submitDeliveryReview=async orderId=>{
+  const selected=$$('.review-employee-check:checked').map(x=>x.value);
+  if(selected.length<1||selected.length>2)return toast('Sélectionnez une ou deux personnes.');
+  const comment=($('#reviewComment')?.value||'').trim();
+  const row={order_id:orderId,reviewer_id:demo.profile.id,employee_1_id:selected[0],employee_2_id:selected[1]||null,rating:currentReviewRating,comment:comment||null};
+  if(hasSupabase){
+    const {error}=await sb.from('delivery_reviews').insert(row);
+    if(error){
+      if(String(error.code)==='23505')return toast('Vous avez déjà laissé un avis pour cette commande.');
+      return toast(error.message||'Impossible d’envoyer votre avis.');
+    }
+  }else{
+    const list=storageGet('ltd_delivery_reviews',[]);
+    if(list.some(r=>String(r.order_id)===String(orderId)))return toast('Vous avez déjà laissé un avis pour cette commande.');
+    list.push({...row,id:uid('review'),created_at:new Date().toISOString()});storageSet('ltd_delivery_reviews',list);
+  }
+  closeModal();toast('Merci pour votre avis !');renderReviews();
+};
+
+async function renderContact(){
+  if(!uiIsStaff())return nav('reviews');
+  await getSettings();applySettingsToUI();
+  const roster=await getPublicStaffRoster();
+  const direction=roster.filter(c=>['patron','copatron'].includes(c.staff_role));
+  $('#contactsList').innerHTML=direction.map(contactHTML).join('')||'<div class="empty">Équipe de direction bientôt disponible.</div>';
+  iconRefresh();
+}
+
 async function renderPacks(){
   await getSettings(); const all=await getProducts(); demo.products=all;
   const packs=all.filter(p=>p.is_pack || String(p.category||'').toLowerCase().includes('pack') || String(p.name||'').toLowerCase().startsWith('pack')).sort((a,b)=>Number(Boolean(b.is_pack_of_month))-Number(Boolean(a.is_pack_of_month)));
@@ -723,6 +829,7 @@ async function renderOrders(){
   $('#ordersList').innerHTML=orders.map(o=>clientOrderHTML(o,byOrder.get(String(o.id))||[])).join('')||'<div class="empty">Aucune commande pour le moment.</div>';iconRefresh();
 }
 $('#refreshOrders').addEventListener('click',renderOrders);
+$('#refreshReviews')?.addEventListener('click',renderReviews);
 function statusLabel(s){return ({pending:'Commande reçue',accepted:'Confirmée',preparing:'En préparation',ready:'Prête',out_for_delivery:'Livreur en route',delivered:'Livrée',cancelled:'Annulée'})[s]||s}
 function orderProgress(status){const seq=['pending','accepted','preparing','out_for_delivery','delivered'];if(status==='ready')return 3;return Math.max(0,seq.indexOf(status))}
 function orderHTML(o,staff=false){
@@ -885,7 +992,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.11.2';
+window.LTD_BUILD='8.12.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1475,7 +1582,7 @@ function initRealtime(){
   if(!hasSupabase)return;
   if(realtimeChannel){try{sb.removeChannel(realtimeChannel)}catch{}realtimeChannel=null}
   let ch=sb.channel('ltd-sandy-live-v8');
-  ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests'].forEach(table=>{
+  ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests','delivery_reviews'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleRealtimeRefresh(table));
   });
   realtimeChannel=ch.subscribe();
