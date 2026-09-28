@@ -273,6 +273,16 @@ async function getPublicStaffRoster(){
   return data||[];
 }
 
+async function getDirectionStaffContacts(){
+  if(!hasSupabase){
+    if(!isStaff())return [];
+    return [{id:'direction-local',name:'Direction LTD',phone:'',label:'Direction',avatar_url:'',bio:'',staff_role:'patron'}];
+  }
+  const {data,error}=await sb.rpc('get_direction_staff_contacts');
+  if(error){console.error(error);return []}
+  return data||[];
+}
+
 async function getReviewStaff(){
   if(!hasSupabase){
     return demo.profile?.staff_role?[{id:demo.profile.id,name:demo.profile.display_name,avatar_url:demo.profile.avatar_url||'',staff_role:demo.profile.staff_role}]:[];
@@ -534,8 +544,7 @@ window.submitDeliveryReview=async orderId=>{
 async function renderContact(){
   if(!uiIsStaff())return nav('reviews');
   await getSettings();applySettingsToUI();
-  const roster=await getPublicStaffRoster();
-  const direction=roster.filter(c=>['patron','copatron'].includes(c.staff_role));
+  const direction=await getDirectionStaffContacts();
   $('#contactsList').innerHTML=direction.map(contactHTML).join('')||'<div class="empty">Équipe de direction bientôt disponible.</div>';
   iconRefresh();
 }
@@ -992,7 +1001,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.12.0';
+window.LTD_BUILD='8.12.1';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
