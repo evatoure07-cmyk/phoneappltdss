@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=8.15.0" />
+  <link rel="stylesheet" href="styles.css?v=8.14.1" />
 </head>
 <body>
   <div class="app-shell">
@@ -136,6 +136,14 @@
           <div id="popularPodium" class="popular-podium"></div>
         </section>
 
+        <section class="editorial-section popular-podium-section client-home-section">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">03</span><div><small>TOP VENTES</small><h3>Podium des produits</h3></div></div>
+            <button class="editorial-link" data-nav="shop">Catalogue <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div id="homePopularPodium" class="popular-podium"></div>
+        </section>
+
         <section class="home-service-rail client-home-section">
           <button data-nav="partner" class="home-service-card home-service-card-dark">
             <span class="home-service-number">01</span>
@@ -153,7 +161,7 @@
 
         <section class="editorial-section">
           <div class="editorial-heading">
-            <div><span class="editorial-index">03</span><div><small>LE JOURNAL DU LTD</small><h3>Dernières nouveautés</h3></div></div>
+            <div><span class="editorial-index">04</span><div><small>LE JOURNAL DU LTD</small><h3>Dernières nouveautés</h3></div></div>
             <button class="editorial-link" data-nav="news">Tout voir <i data-lucide="arrow-right"></i></button>
           </div>
           <div id="homeAnnouncements" class="stack editorial-news"></div>
@@ -322,6 +330,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.15.0"></script>
+  <script src="app.js?v=8.14.1"></script>
 </body>
 </html>
