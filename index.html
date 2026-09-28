@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=8.11.7" />
+  <link rel="stylesheet" href="styles.css?v=8.12.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -162,7 +162,7 @@
             <div><span><i data-lucide="truck"></i> Livraison</span><strong id="homeDeliveryFee">100 $</strong></div>
             <div><span><i data-lucide="timer"></i> Délai indicatif</span><strong id="homeEta">10–20 min</strong></div>
           </div>
-          <button class="store-info-contact" data-nav="contact"><span>Contacter le LTD</span><i data-lucide="arrow-right"></i></button>
+          <button class="store-info-contact" data-nav="reviews"><span>Laisser un avis</span><i data-lucide="star"></i></button>
         </section>
 
 
@@ -174,7 +174,7 @@
             <button data-nav="shop">Catalogue</button>
             <button data-nav="orders">Suivi</button>
             <button data-nav="recruitment">Recrutement</button>
-            <button data-nav="contact">Contact</button>
+            <button data-nav="reviews">Avis</button>
             <button id="employeeFooterBtn">Connexion employés</button>
           </div>
           <p>Votre commerce de proximité à Sandy Shores.</p>
@@ -201,6 +201,12 @@
         <p class="page-intro">Consultez l’avancement de vos commandes et retrouvez votre historique.</p>
         <div id="loyaltyVisualCard" class="loyalty-visual-card hidden"></div>
         <div id="ordersList" class="stack"></div>
+      </section>
+
+      <section class="view" id="reviewsView">
+        <div class="section-heading"><div><span class="eyebrow">VOTRE EXPÉRIENCE</span><h2>Avis</h2></div><button class="btn mini" id="refreshReviews"><i data-lucide="refresh-cw"></i></button></div>
+        <p class="page-intro">Après une livraison, vous pouvez noter la ou les personnes qui vous ont livré. Sélectionnez jusqu’à deux employés et attribuez de 1 à 5 étoiles.</p>
+        <div id="reviewsList" class="stack"></div>
       </section>
 
       <section class="view" id="newsView">
@@ -240,14 +246,14 @@
       </section>
 
       <section class="view" id="contactView">
-        <div class="section-heading"><div><span class="eyebrow">NOUS JOINDRE</span><h2>Contact</h2></div></div>
+        <div class="section-heading"><div><span class="eyebrow">ESPACE EMPLOYÉ</span><h2>Équipe de direction</h2></div></div>
         <div class="info-card contact-main-card">
           <div class="info-icon"><i data-lucide="map-pin"></i></div>
           <div><strong id="contactBusinessAddress">Route 68 — Sandy Shores, Blaine County</strong><p id="contactBusinessHours">Ouvert selon les disponibilités de l'équipe</p></div>
         </div>
         <button class="btn primary full contact-call" id="callBusiness"><i data-lucide="phone-call"></i> Appeler le LTD</button>
         <section class="section-block">
-          <div class="section-heading"><div><span class="eyebrow">ÉQUIPE</span><h3>Responsables</h3></div></div>
+          <div class="section-heading"><div><span class="eyebrow">DIRECTION</span><h3>Gérant & Cogérante</h3></div></div>
           <div id="contactsList" class="contacts-grid"></div>
         </section>
       </section>
@@ -303,7 +309,7 @@
       <button class="nav-item" data-nav="shop"><i data-lucide="layout-grid"></i><span>Catalogue</span></button>
       <button class="nav-item" id="bottomCartButton"><i data-lucide="shopping-cart"></i><span>Panier</span><b class="nav-cart-badge" id="bottomCartCount">0</b></button>
       <button class="nav-item" data-nav="orders"><i data-lucide="map-pinned"></i><span>Suivi</span></button>
-      <button class="nav-item" data-nav="contact"><i data-lucide="phone"></i><span>Contact</span></button>
+      <button class="nav-item" id="roleLastNav" data-nav="reviews"><i data-lucide="star"></i><span>Avis</span></button>
     </nav>
   </div>
 
@@ -311,6 +317,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.11.2"></script>
+  <script src="app.js?v=8.12.0"></script>
 </body>
 </html>
