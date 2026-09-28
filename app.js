@@ -375,6 +375,7 @@ async function renderHome(){
   await getSettings(); applySettingsToUI();
   const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
   demo.products=products;
+  await renderPromoBanner();
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
   $('#homeMonthProducts').innerHTML=packMonth?homeProductHTML(packMonth):'<div class="empty wide-empty">Aucun pack du mois n’est sélectionné pour le moment.</div>';
@@ -466,9 +467,7 @@ async function renderShop(){
   const cats=['Tous','Populaires','Nouveauté','Packs'];
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   renderShopProducts();
-  const auto=promos.find(p=>p.auto_apply);
-  $('#promoStrip').classList.toggle('hidden',!auto);
-  if(auto)$('#promoStrip').innerHTML=`<strong>${esc(auto.name)}</strong> — ${promoDescription(auto)}`;
+  await renderPromoBanner();
   applySettingsToUI();updateCartCount();iconRefresh();
 }
 function renderShopProducts(){
@@ -630,15 +629,90 @@ window.checkout=async()=>{
   }
 };
 
+
+function loyaltyLevel(points){
+  const reward=Math.max(1,num(settings.loyalty_reward_points));
+  if(points>=reward*3)return {name:'BLACK',icon:'crown'};
+  if(points>=reward*2)return {name:'OR',icon:'gem'};
+  if(points>=reward)return {name:'SABLE',icon:'sparkles'};
+  return {name:'MEMBRE',icon:'badge'};
+}
+function renderLoyaltyCard(){
+  const el=$('#loyaltyVisualCard');if(!el)return;
+  if(!demo.profile||isStaff()){el.classList.add('hidden');return}
+  const pts=num(demo.profile.loyalty_points),reward=Math.max(1,num(settings.loyalty_reward_points));
+  const level=loyaltyLevel(pts),progress=Math.min(100,(pts%reward)/reward*100);
+  el.classList.remove('hidden');
+  el.innerHTML=`<div class="loyalty-card-top"><div><small>LTD SANDY SHORES</small><strong>CARTE FIDÉLITÉ</strong></div><i data-lucide="${level.icon}"></i></div>
+    <div class="loyalty-card-name">${esc(demo.profile.display_name||'Client LTD')}</div>
+    <div class="loyalty-card-bottom"><div><small>POINTS</small><strong>${pts}</strong></div><div><small>NIVEAU</small><strong>${level.name}</strong></div></div>
+    <div class="loyalty-card-progress"><span style="width:${progress}%"></span></div>
+    <small class="loyalty-card-next">${pts>=reward?`Récompense disponible • ${reward} pts`:`${reward-pts} points avant votre prochaine récompense`}</small>`;
+  iconRefresh();
+}
+function orderEventTime(events,status){
+  const event=(events||[]).find(e=>e.status===status);
+  return event?new Date(event.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'';
+}
+function clientOrderTimeline(o,events=[]){
+  if(o.status==='cancelled')return `<div class="tracking-cancelled"><i data-lucide="circle-x"></i><div><strong>Commande annulée</strong><span>${esc(o.cancelled_reason||'')}</span></div></div>`;
+  const delivery=o.fulfillment!=='pickup';
+  const steps=delivery
+    ? [['pending','Commande reçue','receipt-text'],['accepted',o.assigned_name?`Prise par ${o.assigned_name}`:'Prise en charge','user-check'],['preparing','Préparation','cooking-pot'],['out_for_delivery','En route','bike'],['delivered','Livrée','badge-check']]
+    : [['pending','Commande reçue','receipt-text'],['accepted',o.assigned_name?`Prise par ${o.assigned_name}`:'Prise en charge','user-check'],['preparing','Préparation','cooking-pot'],['ready','Prête au retrait','package-check'],['delivered','Récupérée','badge-check']];
+  const seq=steps.map(x=>x[0]),current=seq.includes(o.status)?seq.indexOf(o.status):(o.status==='ready'&&delivery?2:0);
+  const avatar=o.assigned_name?String(o.assigned_name).split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase():'';
+  return `<div class="premium-tracking">
+    ${o.assigned_name?`<div class="tracking-driver"><div class="tracking-avatar">${avatar}</div><div><small>PRISE EN CHARGE PAR</small><strong>${esc(o.assigned_name)}</strong></div></div>`:''}
+    <div class="tracking-steps">${steps.map((step,i)=>`<div class="tracking-step ${i<=current?'done':''} ${i===current?'current':''}">
+      <div class="tracking-dot"><i data-lucide="${step[2]}"></i></div>
+      <div class="tracking-copy"><strong>${esc(step[1])}</strong><span>${orderEventTime(events,step[0])|| (i===0?new Date(o.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'')}</span></div>
+    </div>`).join('')}</div>
+  </div>`;
+}
+function clientOrderHTML(o,events=[]){
+  const items=o.order_items||o.items||[],code=o.public_code||`SS-${String(o.id).slice(-5).toUpperCase()}`;
+  return `<article class="order-card premium-order-card"><div class="meta"><span class="order-code">#${esc(code)}</span><span>${formatDate(o.created_at)}</span></div>
+    <div class="premium-order-head"><div><h4>${money(o.total)}</h4><p>${o.fulfillment==='pickup'?'Retrait au LTD':esc(o.delivery_address||'')}</p></div><span class="status ${esc(o.status)}">${statusLabel(o.status)}</span></div>
+    ${clientOrderTimeline(o,events)}
+    <div class="order-detail-grid"><div class="mini-info"><span>Articles</span><strong>${items.reduce((a,x)=>a+num(x.quantity||x.qty),0)||'—'}</strong></div><div class="mini-info"><span>${o.fulfillment==='pickup'?'Retrait':'Estimation'}</span><strong>${o.fulfillment==='pickup'?'Dès que prête':`${o.eta_min||settings.delivery_eta_min}–${o.eta_max||settings.delivery_eta_max} min`}</strong></div></div>
+    <div class="order-actions"><button onclick="showOrderDetail('${o.id}')">Détails</button>${o.status==='delivered'?`<button class="primary-action reorder-premium" onclick="reorderOrder('${o.id}')"><i data-lucide="rotate-ccw"></i> Recommander en 1 clic</button>`:''}</div>
+  </article>`;
+}
+async function renderPromoBanner(){
+  const home=$('#homePromoBanner'),shop=$('#promoStrip');
+  if(!home&&!shop)return;
+  const promos=await getPromotions();
+  const now=Date.now();
+  const active=promos.find(p=>p.active!==false&&p.banner_enabled!==false&&(!p.starts_at||new Date(p.starts_at).getTime()<=now)&&(!p.ends_at||new Date(p.ends_at).getTime()>=now));
+  if(!active){home?.classList.add('hidden');shop?.classList.add('hidden');return}
+  let product=null;
+  if(active.product_id){
+    const products=demo.products.length?demo.products:await getProducts();
+    product=products.find(p=>String(p.id)===String(active.product_id));
+  }
+  const fallback=active.banner_text||`${active.name}${active.code?` • Code ${active.code}`:''}`;
+  const html=`<div class="promo-banner-icon">${product?esc(product.emoji||'🏷️'):'🏷️'}</div><div class="promo-banner-copy"><small>OFFRE DU MOMENT</small><strong>${esc(fallback)}</strong>${product?`<span>${esc(product.name)} • ${money(product.price)}</span>`:''}</div>${active.code?`<button onclick="navigator.clipboard?.writeText('${esc(active.code)}');toast('Code copié !')">COPIER ${esc(active.code)}</button>`:''}`;
+  if(home){home.innerHTML=html;home.classList.remove('hidden')}
+  if(shop){shop.innerHTML=html;shop.classList.remove('hidden')}
+  iconRefresh();
+}
+
 async function renderOrders(){
   if(isPreviewMode() && previewRole==='customer'){
-    $('#ordersList').innerHTML=`<div class="empty"><strong>Aperçu client</strong><br><br>Un client connecté retrouvera ici ses commandes et leur suivi. Aucune donnée réelle de votre compte direction n’est affichée pendant l’aperçu.</div>`;return;
+    $('#ordersList').innerHTML=`<div class="empty"><strong>Aperçu client</strong><br><br>Un client connecté retrouvera ici ses commandes et leur suivi.</div>`;return;
   }
-  if(!demo.profile){$('#ordersList').innerHTML=`<div class="empty">Connectez-vous pour retrouver vos commandes.<br><br><button class="btn primary" onclick="showAuth('login')">Se connecter</button></div>`;return}
-  let orders=[];
-  if(hasSupabase){const {data}=await sb.from('orders').select('*,order_items(*)').eq('user_id',demo.profile.id).order('created_at',{ascending:false});orders=data||[]}
-  else orders=demo.orders.filter(o=>o.user_id===demo.profile.id);
-  $('#ordersList').innerHTML=orders.map(o=>orderHTML(o,false)).join('')||'<div class="empty">Aucune commande pour le moment.</div>';iconRefresh();
+  if(!demo.profile){$('#loyaltyVisualCard')?.classList.add('hidden');$('#ordersList').innerHTML=`<div class="empty">Connectez-vous pour retrouver vos commandes.<br><br><button class="btn primary" onclick="showAuth('login')">Se connecter</button></div>`;return}
+  renderLoyaltyCard();
+  let orders=[],events=[];
+  if(hasSupabase){
+    const {data}=await sb.from('orders').select('*,order_items(*)').eq('user_id',demo.profile.id).order('created_at',{ascending:false});
+    orders=data||[];
+    const ids=orders.map(o=>o.id);
+    if(ids.length){const ev=await sb.from('order_events').select('*').in('order_id',ids).order('created_at',{ascending:true});events=ev.data||[]}
+  }else{orders=demo.orders.filter(o=>o.user_id===demo.profile.id);events=orders.flatMap(o=>(o.events||[]).map(e=>({...e,order_id:o.id})))}
+  const byOrder=new Map();for(const e of events){const arr=byOrder.get(String(e.order_id))||[];arr.push(e);byOrder.set(String(e.order_id),arr)}
+  $('#ordersList').innerHTML=orders.map(o=>clientOrderHTML(o,byOrder.get(String(o.id))||[])).join('')||'<div class="empty">Aucune commande pour le moment.</div>';iconRefresh();
 }
 $('#refreshOrders').addEventListener('click',renderOrders);
 function statusLabel(s){return ({pending:'Commande reçue',accepted:'Confirmée',preparing:'En préparation',ready:'Prête',out_for_delivery:'Livreur en route',delivered:'Livrée',cancelled:'Annulée'})[s]||s}
@@ -803,7 +877,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.10.0';
+window.LTD_BUILD='8.11.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1164,8 +1238,28 @@ async function adminPromotion(){
   const list=await getPromotions(true);demo.promotions=list;
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Promotions</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="badge-percent"></i></div><div><strong>${esc(p.name)}</strong><p>${promoDescription(p)}${p.code?` • Code ${esc(p.code)}`:' • Automatique'} • ${p.active?'Active':'Inactive'}</p></div><div class="catalog-actions"><button onclick="togglePromotion('${p.id}',${p.active!==false})"><i data-lucide="${p.active!==false?'pause':'play'}"></i></button></div></div>`).join('')||'<div class="empty">Aucune promotion créée.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="showPromotionForm()"><i data-lucide="plus"></i> Nouvelle promotion</button>`);iconRefresh();
 }
-window.showPromotionForm=()=>openModal(`<button class="icon-btn close" onclick="adminPromotion()">×</button><h3>Créer une promotion</h3><div class="form-group"><label>Nom de l’offre</label><input id="promoName" placeholder="Ex : Livraison du dimanche"></div><div class="form-grid"><div class="form-group"><label>Type</label><select id="promoType"><option value="percent">Pourcentage</option><option value="fixed">Montant fixe</option><option value="free_delivery">Livraison offerte</option></select></div><div class="form-group"><label>Valeur</label><input id="promoValue" type="number" min="0" value="10"></div></div><div class="form-group"><label>Minimum de commande</label><input id="promoMin" type="number" min="0" value="0"></div><div class="form-group"><label>Code (vide si automatique)</label><input id="promoCodeAdmin" placeholder="Ex : SANDY10"></div><label class="checkbox-row"><input type="checkbox" id="promoAuto"> Appliquer automatiquement</label><div class="form-grid"><div class="form-group"><label>Début (facultatif)</label><input id="promoStart" type="datetime-local"></div><div class="form-group"><label>Fin (facultatif)</label><input id="promoEnd" type="datetime-local"></div></div><div class="modal-actions"><button class="btn primary" onclick="savePromotion()">Créer l’offre</button></div>`);
-window.savePromotion=async()=>{const code=$('#promoCodeAdmin').value.trim().toUpperCase();const x={name:$('#promoName').value.trim(),discount_type:$('#promoType').value,value:num($('#promoValue').value),min_subtotal:num($('#promoMin').value),code:code||null,auto_apply:$('#promoAuto').checked,starts_at:$('#promoStart').value?new Date($('#promoStart').value).toISOString():null,ends_at:$('#promoEnd').value?new Date($('#promoEnd').value).toISOString():null,active:true};if(!x.name)return toast('Donnez un nom à l’offre.');if(x.auto_apply)x.code=null;if(hasSupabase){const{error}=await sb.from('promotions').insert(x);if(error)return toast(error.message)}else{demo.promotions.unshift({...x,id:uid('promo'),created_at:new Date().toISOString()});storageSet(LS.promotions,demo.promotions)}toast('Promotion créée.');adminPromotion();};
+window.showPromotionForm=async()=>{
+  const products=(await getProducts(true)).filter(p=>!p.is_pack&&p.active!==false);
+  openModal(`<button class="icon-btn close" onclick="adminPromotion()">×</button><h3>Créer une promotion</h3>
+  <div class="form-group"><label>Nom de l’offre</label><input id="promoName" placeholder="Ex : Offre Sandy"></div>
+  <div class="form-grid"><div class="form-group"><label>Type</label><select id="promoType"><option value="percent">Pourcentage</option><option value="fixed">Montant fixe</option><option value="free_delivery">Livraison offerte</option></select></div><div class="form-group"><label>Valeur</label><input id="promoValue" type="number" min="0" value="10"></div></div>
+  <div class="form-group"><label>Article mis en avant (facultatif)</label><select id="promoProduct"><option value="">Aucun article</option>${products.map(p=>`<option value="${p.id}">${esc(p.name)} — ${money(p.price)}</option>`).join('')}</select></div>
+  <div class="form-group"><label>Texte de la bannière</label><input id="promoBannerText" placeholder="Ex : -20 % sur la grosse perceuse aujourd’hui !"></div>
+  <div class="form-group"><label>Minimum de commande</label><input id="promoMin" type="number" min="0" value="0"></div>
+  <div class="form-group"><label>Code (vide si automatique)</label><input id="promoCodeAdmin" placeholder="Ex : SANDY10"></div>
+  <label class="checkbox-row"><input type="checkbox" id="promoAuto"> Appliquer automatiquement</label>
+  <label class="checkbox-row"><input type="checkbox" id="promoBanner" checked> Afficher dans la bannière du site</label>
+  <div class="form-grid"><div class="form-group"><label>Début</label><input id="promoStart" type="datetime-local"></div><div class="form-group"><label>Fin</label><input id="promoEnd" type="datetime-local"></div></div>
+  <div class="modal-actions"><button class="btn primary" onclick="savePromotion()">Créer l’offre</button></div>`);
+};
+window.savePromotion=async()=>{
+  const code=$('#promoCodeAdmin').value.trim().toUpperCase();
+  const x={name:$('#promoName').value.trim(),discount_type:$('#promoType').value,value:num($('#promoValue').value),min_subtotal:num($('#promoMin').value),code:code||null,auto_apply:$('#promoAuto').checked,starts_at:$('#promoStart').value?new Date($('#promoStart').value).toISOString():null,ends_at:$('#promoEnd').value?new Date($('#promoEnd').value).toISOString():null,active:true,product_id:$('#promoProduct').value||null,banner_text:$('#promoBannerText').value.trim()||null,banner_enabled:$('#promoBanner').checked};
+  if(!x.name)return toast('Donnez un nom à l’offre.');if(x.auto_apply)x.code=null;
+  if(hasSupabase){const{error}=await sb.from('promotions').insert(x);if(error)return toast(error.message)}
+  else{demo.promotions.unshift({...x,id:uid('promo'),created_at:new Date().toISOString()});storageSet(LS.promotions,demo.promotions)}
+  toast('Promotion créée.');await renderPromoBanner();adminPromotion();
+};
 window.togglePromotion=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('promotions').update({active:!current}).eq('id',id);if(error)return toast(error.message)}else{const p=demo.promotions.find(x=>String(x.id)===String(id));if(p)p.active=!current;storageSet(LS.promotions,demo.promotions)}toast(current?'Promotion désactivée.':'Promotion activée.');adminPromotion();};
 async function adminContacts(){const list=await getContacts();openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Contacts</h3><div class="stack">${list.map(c=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="phone"></i></div><div><strong>${esc(c.label)} — ${esc(c.name)}</strong><p>${esc(c.phone)}</p></div><div class="catalog-actions"><button onclick="editContact('${c.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="editContact('')">Ajouter un contact</button>`);demo.contacts=list;iconRefresh()}
 window.editContact=id=>{const c=demo.contacts.find(x=>String(x.id)===String(id));openModal(`<button class="icon-btn close" onclick="adminContacts()">×</button><h3>${c?'Modifier':'Ajouter'} un contact</h3><div class="form-group"><label>Fonction</label><input id="contactLabel" value="${esc(c?.label||'')}"></div><div class="form-group"><label>Nom</label><input id="contactName" value="${esc(c?.name||'')}"></div><div class="form-group"><label>Numéro</label><input id="contactPhone" value="${esc(c?.phone||'')}"></div><div class="form-group"><label>Ordre</label><input id="contactOrder" type="number" value="${num(c?.sort_order||1)}"></div><div class="modal-actions"><button class="btn primary" onclick="saveContact('${id}')">Enregistrer</button></div>`)};
