@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=8.14.0" />
+  <link rel="stylesheet" href="styles.css?v=8.15.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -126,6 +126,14 @@
             <button class="editorial-link" data-nav="shop">Tout voir <i data-lucide="arrow-right"></i></button>
           </div>
           <div id="homeNewProducts" class="home-product-row editorial-products"></div>
+        </section>
+
+        <section class="editorial-section client-home-section popular-podium-section">
+          <div class="editorial-heading">
+            <div><span class="editorial-index">03</span><div><small>LES PLUS COMMANDÉS</small><h3>Podium des produits</h3></div></div>
+            <button class="editorial-link" data-nav="shop">Voir le catalogue <i data-lucide="arrow-right"></i></button>
+          </div>
+          <div id="popularPodium" class="popular-podium"></div>
         </section>
 
         <section class="home-service-rail client-home-section">
@@ -314,6 +322,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.14.0"></script>
+  <script src="app.js?v=8.15.0"></script>
 </body>
 </html>
