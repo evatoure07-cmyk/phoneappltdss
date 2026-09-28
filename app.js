@@ -304,6 +304,22 @@ async function getProducts(includeInactive=false){
   let q=sb.from('products').select('*').order('category').order('name'); if(!includeInactive)q=q.eq('active',true);
   const {data,error}=await q; if(error){console.error(error);return []} return data||[];
 }
+async function getPopularProducts(limit=6){
+  if(!hasSupabase){
+    const counts=new Map();
+    for(const o of demo.orders.filter(o=>o.status==='delivered')){
+      for(const i of (o.items||o.order_items||[])){
+        const id=String(i.product_id||i.id||'');
+        if(!id)continue;
+        counts.set(id,(counts.get(id)||0)+num(i.quantity||i.qty));
+      }
+    }
+    return [...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,limit).map(([product_id,sold_quantity])=>({product_id,sold_quantity,order_count:0}));
+  }
+  const {data,error}=await sb.rpc('get_popular_products',{p_limit:limit});
+  if(error){console.error(error);return []}
+  return data||[];
+}
 async function getAnnouncements(includeInactive=false){
   if(!hasSupabase) return demo.announcements.filter(a=>includeInactive||a.active!==false).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   let q=sb.from('announcements').select('*').order('created_at',{ascending:false}); if(!includeInactive)q=q.eq('active',true);
@@ -588,8 +604,12 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');i
 
 async function renderShop(){
   await getSettings();
-  const [all,promos]=await Promise.all([getProducts(),getPromotions()]);
-  demo.products=all;
+  const [all,promos,popularRows]=await Promise.all([getProducts(),getPromotions(),getPopularProducts(6)]);
+  const popularMap=new Map(popularRows.map((row,index)=>[String(row.product_id),{rank:index+1,qty:num(row.sold_quantity)}]));
+  demo.products=all.map(p=>{
+    const pop=popularMap.get(String(p.id));
+    return {...p,popular:Boolean(pop),popular_rank:pop?.rank||null,popular_quantity:pop?.qty||0};
+  });
   const cats=['Tous','Populaires','Nouveauté','Packs'];
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   renderShopProducts();
@@ -615,7 +635,7 @@ function renderShopProducts(){
 function productHTML(p){
   const available=p.available!==false && (p.stock===null||p.stock===undefined||num(p.stock)>0);
   const badge=p.is_product_of_month?'Produit du mois':(p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':'')));
-  return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${available?'':'unavailable'}">${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4>${p.description?`<p class="product-description">${esc(p.description)}</p>`:'<p class="product-description empty-description">Aucune description.</p>'}<div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
+  return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${p.popular?'auto-popular-product':''} ${available?'':'unavailable'}">${p.popular&&!p.is_pack?`<span class="popular-ribbon">POPULAIRE #${p.popular_rank}</span>`:''}${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4>${p.description?`<p class="product-description">${esc(p.description)}</p>`:'<p class="product-description empty-description">Aucune description.</p>'}<div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
 }
 $('#productSearch')?.addEventListener('input',renderShopProducts);
 document.addEventListener('click',e=>{
@@ -1012,7 +1032,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.13.1';
+window.LTD_BUILD='8.14.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1145,13 +1165,23 @@ async function renderAdmin(){
   if(uiCan('stats_view')||(!isPreviewMode()&&isDirection())){
     if(hasSupabase){const{data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);orders=data||[]}else orders=demo.orders;
   }
-  const delivered=orders.filter(o=>o.status==='delivered'),active=orders.filter(o=>!['delivered','cancelled'].includes(o.status));
-  const revenue=delivered.reduce((a,o)=>a+num(o.total),0),fees=delivered.reduce((a,o)=>a+num(o.delivery_fee),0),avg=delivered.length?revenue/delivered.length:0;
-  const customers=new Map(),products=new Map();for(const o of delivered){const key=o.customer_name||'Client';customers.set(key,(customers.get(key)||0)+num(o.total));for(const i of (o.order_items||o.items||[])){const name=i.product_name||i.name||'Article';products.set(name,(products.get(name)||0)+num(i.quantity||i.qty));}}
-  const topCustomer=[...customers.entries()].sort((a,b)=>b[1]-a[1])[0],topProduct=[...products.entries()].sort((a,b)=>b[1]-a[1])[0];
-  $('#adminStats').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`:'';
+  const active=orders.filter(o=>!['delivered','cancelled'].includes(o.status));
+  let allStats={delivered_revenue:0,delivered_orders:0,average_basket:0,delivery_fees:0,customers_served:0,units_sold:0,top_product_name:'—',top_product_quantity:0};
+  if(uiCan('stats_view')||(!isPreviewMode()&&isDirection())){
+    if(hasSupabase){
+      const {data,error}=await sb.rpc('get_direction_sales_stats');
+      if(!error&&Array.isArray(data)&&data[0])allStats={...allStats,...data[0]};
+    }else{
+      const delivered=demo.orders.filter(o=>o.status==='delivered');
+      const productCounts=new Map();
+      for(const o of delivered)for(const i of (o.items||o.order_items||[])){const name=i.product_name||i.name||'Article';productCounts.set(name,(productCounts.get(name)||0)+num(i.quantity||i.qty));}
+      const top=[...productCounts.entries()].sort((a,b)=>b[1]-a[1])[0];
+      allStats={delivered_revenue:delivered.reduce((a,o)=>a+num(o.total),0),delivered_orders:delivered.length,average_basket:delivered.length?delivered.reduce((a,o)=>a+num(o.total),0)/delivered.length:0,delivery_fees:delivered.reduce((a,o)=>a+num(o.delivery_fee),0),customers_served:new Set(delivered.map(o=>o.user_id||o.customer_name)).size,units_sold:[...productCounts.values()].reduce((a,b)=>a+b,0),top_product_name:top?.[0]||'—',top_product_quantity:top?.[1]||0};
+    }
+  }
+  $('#adminStats').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="kpi-card"><span>CA livré total</span><strong>${money(allStats.delivered_revenue)}</strong></div><div class="kpi-card"><span>Commandes livrées</span><strong>${num(allStats.delivered_orders)}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(allStats.average_basket)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(allStats.delivery_fees)}</strong></div><div class="kpi-card"><span>Articles vendus</span><strong>${num(allStats.units_sold)}</strong></div>`:'';
   adminHistoryOrders=orders;
-  $('#adminActivity').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>
+  $('#adminActivity').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="order-detail-grid"><div class="mini-info"><span>Produit le + commandé</span><strong>${esc(allStats.top_product_name||'—')} • ${num(allStats.top_product_quantity)} unités</strong></div><div class="mini-info"><span>Clients servis</span><strong>${num(allStats.customers_served)}</strong></div></div>
   <div class="admin-history-head"><div><span class="eyebrow">HISTORIQUE</span><h3>Commandes récentes</h3></div><button class="icon-btn" onclick="resetAdminHistoryFilters()" title="Réinitialiser"><i data-lucide="rotate-ccw"></i></button></div>
   <div class="admin-history-tools">
     <div class="search-wrap"><i data-lucide="search"></i><input id="adminHistorySearch" placeholder="Code, client, adresse…" oninput="renderAdminHistory()"></div>
@@ -1176,10 +1206,10 @@ async function adminAnnouncements(){
 function adminAnnouncement(){openModal(`<button class="icon-btn close" onclick="adminAnnouncements()">×</button><h3>Publier une annonce</h3><div class="form-group"><label>Titre</label><input id="annTitle" placeholder="Titre de l’annonce"></div><div class="form-group"><label>Sous-titre / texte</label><textarea id="annBody" placeholder="Texte affiché sous le titre"></textarea></div><div class="form-group"><label>Type</label><select id="annType"><option value="news">Actualité</option><option value="recruitment">Recrutement</option><option value="promotion">Promotion</option><option value="alert">Information importante</option></select></div><label class="checkbox-row"><input type="checkbox" id="annFeatured"> Mettre à la une / Nouveau</label><div class="modal-actions"><button class="btn primary" onclick="saveAnnouncement()">Publier</button></div>`)}
 window.saveAnnouncement=async()=>{const x={title:$('#annTitle').value.trim(),body:$('#annBody').value.trim(),type:$('#annType').value,featured:$('#annFeatured').checked,active:true};if(!x.title||!x.body)return toast('Titre et sous-titre obligatoires.');if(hasSupabase){const{error}=await sb.from('announcements').insert(x);if(error)return toast(error.message)}else{demo.announcements.unshift({...x,id:uid('ann'),created_at:new Date().toISOString()});storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce publiée.');adminAnnouncements();};
 window.deleteAnnouncement=async id=>{if(!confirm('Supprimer cette annonce ?'))return;if(hasSupabase){const{error}=await sb.from('announcements').delete().eq('id',id);if(error)return toast(error.message)}else{demo.announcements=demo.announcements.filter(a=>String(a.id)!==String(id));storageSet(LS.announcements,demo.announcements)}renderHome();toast('Annonce supprimée.');adminAnnouncements();};
-function adminProduct(product=null){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${product?'Modifier':'Ajouter'} un produit</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="prodName" value="${esc(product?.name||'')}"></div><div class="form-group"><label>Prix</label><input id="prodPrice" type="number" min="0" step="0.01" value="${num(product?.price)}"></div></div><div class="form-group"><label>Description</label><input id="prodDesc" value="${esc(product?.description||'')}"></div><div class="form-grid"><div class="form-group"><label>Catégorie</label><select id="prodCat">${['Outillage','Autres','Agriculture','Boissons','Document','Divers'].map(cat=>`<option value="${cat}" ${String(product?.category||'Divers')===cat?'selected':''}>${cat}</option>`).join('')}</select></div><div class="form-group"><label>Emoji / icône</label><input id="prodEmoji" value="${esc(product?.emoji||'🛒')}"></div></div><div class="form-group"><label>Stock (laisser vide = illimité)</label><input id="prodStock" type="number" min="0" value="${product?.stock??''}"></div><div class="two-col"><label class="checkbox-row"><input type="checkbox" id="prodPopular" ${product?.popular?'checked':''}> Populaire</label><label class="checkbox-row"><input type="checkbox" id="prodNew" ${product?.is_new?'checked':''}> Nouveauté</label></div><label class="checkbox-row"><input type="checkbox" id="prodMonth" ${product?.is_product_of_month?'checked':''}> Produit du mois</label><label class="checkbox-row"><input type="checkbox" id="prodAvailable" ${product?.available!==false?'checked':''}> Disponible à la vente</label><div class="modal-actions"><button class="btn primary" onclick="saveProduct('${product?.id||''}')">Enregistrer</button></div>`)}
+function adminProduct(product=null){openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>${product?'Modifier':'Ajouter'} un produit</h3><div class="form-grid"><div class="form-group"><label>Nom</label><input id="prodName" value="${esc(product?.name||'')}"></div><div class="form-group"><label>Prix</label><input id="prodPrice" type="number" min="0" step="0.01" value="${num(product?.price)}"></div></div><div class="form-group"><label>Description</label><input id="prodDesc" value="${esc(product?.description||'')}"></div><div class="form-grid"><div class="form-group"><label>Catégorie</label><select id="prodCat">${['Outillage','Autres','Agriculture','Boissons','Document','Divers'].map(cat=>`<option value="${cat}" ${String(product?.category||'Divers')===cat?'selected':''}>${cat}</option>`).join('')}</select></div><div class="form-group"><label>Emoji / icône</label><input id="prodEmoji" value="${esc(product?.emoji||'🛒')}"></div></div><div class="form-group"><label>Stock (laisser vide = illimité)</label><input id="prodStock" type="number" min="0" value="${product?.stock??''}"></div><div class="two-col"><div class="notice compact"><i data-lucide="trending-up"></i><div><strong>Popularité automatique</strong><span>Calculée selon les produits réellement commandés.</span></div></div><label class="checkbox-row"><input type="checkbox" id="prodNew" ${product?.is_new?'checked':''}> Nouveauté</label></div><label class="checkbox-row"><input type="checkbox" id="prodMonth" ${product?.is_product_of_month?'checked':''}> Produit du mois</label><label class="checkbox-row"><input type="checkbox" id="prodAvailable" ${product?.available!==false?'checked':''}> Disponible à la vente</label><div class="modal-actions"><button class="btn primary" onclick="saveProduct('${product?.id||''}')">Enregistrer</button></div>`)}
 window.saveProduct=async id=>{
   const rawStock=$('#prodStock').value.trim();
-  const x={name:$('#prodName').value.trim(),description:$('#prodDesc').value.trim(),price:num($('#prodPrice').value),category:$('#prodCat').value.trim()||'Divers',emoji:$('#prodEmoji').value.trim()||'🛒',stock:rawStock===''?null:Math.max(0,Math.floor(num(rawStock))),popular:$('#prodPopular').checked,is_new:$('#prodNew').checked,is_product_of_month:$('#prodMonth').checked,available:$('#prodAvailable').checked,active:true};
+  const x={name:$('#prodName').value.trim(),description:$('#prodDesc').value.trim(),price:num($('#prodPrice').value),category:$('#prodCat').value.trim()||'Divers',emoji:$('#prodEmoji').value.trim()||'🛒',stock:rawStock===''?null:Math.max(0,Math.floor(num(rawStock))),popular:false,is_new:$('#prodNew').checked,is_product_of_month:$('#prodMonth').checked,available:$('#prodAvailable').checked,active:true};
   if(!x.name)return toast('Nom obligatoire.');
   if(hasSupabase){
     if(x.is_product_of_month){
