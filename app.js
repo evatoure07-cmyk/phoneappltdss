@@ -525,13 +525,13 @@ window.limitReviewEmployees=el=>{
 
 window.setReviewRating=n=>{
   currentReviewRating=Math.max(1,Math.min(5,num(n)));
-  $('.review-stars button').forEach(b=>b.classList.toggle('active',num(b.dataset.rating)<=currentReviewRating));
+  $$('.review-stars button').forEach(b=>b.classList.toggle('active',num(b.dataset.rating)<=currentReviewRating));
   if($('#reviewRatingLabel'))$('#reviewRatingLabel').textContent=`${currentReviewRating} / 5`;
 };
 window.setReviewSatisfaction=value=>{
   if(!['tres_satisfait','satisfait','moyennement_satisfait','insatisfait'].includes(value))return;
   currentReviewSatisfaction=value;
-  $('.review-satisfaction-grid button').forEach(b=>b.classList.toggle('active',b.dataset.satisfaction===value));
+  $$('.review-satisfaction-grid button').forEach(b=>b.classList.toggle('active',b.dataset.satisfaction===value));
 };
 
 window.submitDeliveryReview=async orderId=>{
@@ -1012,7 +1012,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.13.0';
+window.LTD_BUILD='8.13.1';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
