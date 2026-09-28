@@ -665,3 +665,180 @@ html[data-theme="light"] .section-kicker,
 html[data-theme="light"] .editorial-index{
   color:#b58a50!important
 }
+
+
+/* ===== V8.11.4 — latte light theme ===== */
+html[data-theme="light"]{
+  --bg:#f4eee6;
+  --surface:#f8f2ec;
+  --surface2:#e9ddd3;
+  --surface3:#d8c5b7;
+  --line:rgba(111,92,77,.14);
+  --gold:#B58A50;
+  --gold2:#9B7446;
+  --cream:#6F5C4D;
+  --muted:#9A8A7D;
+}
+
+html[data-theme="light"] body{
+  background:linear-gradient(180deg,#faf6f1 0%,#f4eee6 52%,#eee4da 100%)!important;
+  color:#6F5C4D!important
+}
+
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] strong{
+  color:#6F5C4D!important
+}
+
+html[data-theme="light"] p,
+html[data-theme="light"] span,
+html[data-theme="light"] small,
+html[data-theme="light"] .subtle{
+  color:#9A8A7D!important
+}
+
+html[data-theme="light"] .utility-icon,
+html[data-theme="light"] .catalog-icon,
+html[data-theme="light"] .info-icon,
+html[data-theme="light"] .product-icon,
+html[data-theme="light"] .home-shortcut .utility-icon{
+  background:#8E7461!important;
+  color:#F9F2EB!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .pack-card,
+html[data-theme="light"] .order-card,
+html[data-theme="light"] .catalog-row,
+html[data-theme="light"] .admin-history-item{
+  background:#B79B83!important;
+  border-color:rgba(111,92,77,.14)!important;
+  color:#F8F1EA!important
+}
+
+html[data-theme="light"] .product-card h3,
+html[data-theme="light"] .product-card h4,
+html[data-theme="light"] .product-card strong,
+html[data-theme="light"] .pack-card h3,
+html[data-theme="light"] .pack-card strong,
+html[data-theme="light"] .order-card h4,
+html[data-theme="light"] .order-card strong,
+html[data-theme="light"] .catalog-row strong{
+  color:#FFF8F2!important
+}
+
+html[data-theme="light"] .product-card p,
+html[data-theme="light"] .pack-card p,
+html[data-theme="light"] .order-card p,
+html[data-theme="light"] .catalog-row p,
+html[data-theme="light"] .product-description{
+  color:#EEDFD4!important
+}
+
+html[data-theme="light"] .product-visual{
+  background:linear-gradient(145deg,#C9AF98 0%,#A98A73 100%)!important;
+  border-color:rgba(111,92,77,.10)!important
+}
+
+html[data-theme="light"] .product-visual,
+html[data-theme="light"] .product-visual *{
+  color:#FFF8F2!important
+}
+
+html[data-theme="light"] .utility-tile,
+html[data-theme="light"] .home-shortcut,
+html[data-theme="light"] .mini-info,
+html[data-theme="light"] .info-card,
+html[data-theme="light"] .guest-choice-card,
+html[data-theme="light"] .pack-setting-card,
+html[data-theme="light"] .pack-collapse-toggle{
+  background:#F7F0E9!important;
+  border-color:rgba(111,92,77,.12)!important;
+  color:#6F5C4D!important
+}
+
+html[data-theme="light"] .utility-tile strong,
+html[data-theme="light"] .home-shortcut strong,
+html[data-theme="light"] .mini-info strong,
+html[data-theme="light"] .info-card strong{
+  color:#6F5C4D!important
+}
+
+html[data-theme="light"] .utility-tile small,
+html[data-theme="light"] .home-shortcut small,
+html[data-theme="light"] .mini-info span,
+html[data-theme="light"] .info-card p{
+  color:#9A8A7D!important
+}
+
+html[data-theme="light"] .editorial-hero{
+  background:linear-gradient(145deg,#D8C2A8 0%,#CDB292 100%)!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+
+html[data-theme="light"] .editorial-hero h2,
+html[data-theme="light"] .editorial-hero p,
+html[data-theme="light"] .editorial-hero .editorial-kicker,
+html[data-theme="light"] .editorial-hero .editorial-location,
+html[data-theme="light"] .editorial-hero .editorial-status{
+  color:#FFF9F3!important
+}
+
+html[data-theme="light"] .editorial-primary{
+  background:#FFF9F3!important;
+  color:#8E7461!important;
+  border-color:rgba(255,255,255,.46)!important
+}
+
+html[data-theme="light"] .editorial-secondary{
+  background:rgba(255,255,255,.14)!important;
+  color:#FFF9F3!important;
+  border-color:rgba(255,255,255,.30)!important
+}
+
+html[data-theme="light"] .status,
+html[data-theme="light"] .status-pill,
+html[data-theme="light"] .home-status-pill,
+html[data-theme="light"] .stock-badge{
+  background:#C3A58B!important;
+  color:#FFF8F2!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+
+html[data-theme="light"] .btn.primary,
+html[data-theme="light"] .primary-action{
+  background:linear-gradient(135deg,#B58A50,#A67B45)!important;
+  color:#FFF9F3!important
+}
+
+html[data-theme="light"] .btn.ghost,
+html[data-theme="light"] .icon-btn,
+html[data-theme="light"] .order-actions button{
+  background:#E8DDD4!important;
+  color:#6F5C4D!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+
+html[data-theme="light"] .tracking-driver,
+html[data-theme="light"] .tracking-dot{
+  background:#C3A58B!important;
+  color:#FFF8F2!important
+}
+
+html[data-theme="light"] .tracking-copy strong{
+  color:#6F5C4D!important
+}
+
+html[data-theme="light"] .premium-promo-banner,
+html[data-theme="light"] .promo-strip{
+  background:linear-gradient(135deg,#E3D1C1,#D1B59D)!important;
+  border-color:rgba(181,138,80,.18)!important
+}
+
+html[data-theme="light"] .promo-banner-copy strong{
+  color:#6F5C4D!important
+}
