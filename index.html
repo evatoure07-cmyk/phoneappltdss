@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=8.10.0" />
+  <link rel="stylesheet" href="styles.css?v=8.11.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -37,6 +37,7 @@
           <span>Site officiel du LTD Sandy Shores</span>
           <button class="storefront-strip-link" data-nav="news">Voir les nouveautés</button>
         </div>
+        <div id="homePromoBanner" class="promo-banner premium-promo-banner hidden client-home-section"></div>
 
         <section id="staffHomeDashboard" class="staff-home-dashboard hidden">
           <div class="staff-home-welcome">
@@ -198,6 +199,7 @@
       <section class="view" id="ordersView">
         <div class="section-heading"><div><span class="eyebrow">MES COMMANDES</span><h2>Suivi de commande</h2></div><button class="btn mini" id="refreshOrders"><i data-lucide="refresh-cw"></i></button></div>
         <p class="page-intro">Consultez l’avancement de vos commandes et retrouvez votre historique.</p>
+        <div id="loyaltyVisualCard" class="loyalty-visual-card hidden"></div>
         <div id="ordersList" class="stack"></div>
       </section>
 
@@ -309,6 +311,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.10.0"></script>
+  <script src="app.js?v=8.11.0"></script>
 </body>
 </html>
