@@ -842,3 +842,105 @@ html[data-theme="light"] .promo-strip{
 html[data-theme="light"] .promo-banner-copy strong{
   color:#6F5C4D!important
 }
+
+
+/* ===== V8.11.5 — force latte colors on visible home components ===== */
+html[data-theme="light"] .home-product-card{
+  background:#B79B83!important;
+  border:1px solid rgba(111,92,77,.14)!important;
+  color:#FFF8F2!important;
+  box-shadow:0 12px 26px rgba(92,73,58,.10)!important
+}
+html[data-theme="light"] .home-product-card strong{
+  color:#FFF8F2!important
+}
+html[data-theme="light"] .home-product-card small{
+  color:#F0E0D3!important
+}
+html[data-theme="light"] .home-product-visual{
+  background:linear-gradient(145deg,#C9AF98 0%,#A98A73 100%)!important;
+  color:#FFF8F2!important
+}
+html[data-theme="light"] .home-product-visual span{
+  background:#B58A50!important;
+  color:#FFF8F2!important
+}
+
+html[data-theme="light"] .utility-tile .utility-icon{
+  background:#8E7461!important;
+  color:#FFF8F2!important;
+  box-shadow:none!important
+}
+html[data-theme="light"] .utility-tile .utility-icon svg{
+  color:#FFF8F2!important;
+  stroke:#FFF8F2!important
+}
+html[data-theme="light"] .utility-tile{
+  background:#F8F2EC!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+html[data-theme="light"] .utility-copy strong{
+  color:#6F5C4D!important
+}
+html[data-theme="light"] .utility-copy small{
+  color:#9A8A7D!important
+}
+html[data-theme="light"] .utility-arrow{
+  color:#8E7461!important
+}
+
+html[data-theme="light"] .editorial-heading h3{
+  color:#6F5C4D!important
+}
+html[data-theme="light"] .editorial-heading small{
+  color:#9A8A7D!important
+}
+html[data-theme="light"] .editorial-index,
+html[data-theme="light"] .editorial-link{
+  color:#B58A50!important
+}
+
+html[data-theme="light"] .feature-banner{
+  background:linear-gradient(135deg,#C9AF98 0%,#B79B83 100%)!important;
+  color:#FFF8F2!important
+}
+html[data-theme="light"] .feature-banner h3,
+html[data-theme="light"] .feature-banner p,
+html[data-theme="light"] .feature-banner small,
+html[data-theme="light"] .feature-banner button{
+  color:#FFF8F2!important
+}
+html[data-theme="light"] .feature-banner button{
+  border-color:rgba(255,248,242,.34)!important
+}
+
+html[data-theme="light"] .home-service-card,
+html[data-theme="light"] .home-service-card-dark{
+  background:#F4EAE1!important;
+  border-color:rgba(111,92,77,.12)!important;
+  color:#6F5C4D!important
+}
+html[data-theme="light"] .home-service-card strong,
+html[data-theme="light"] .home-service-card-dark strong{
+  color:#6F5C4D!important
+}
+html[data-theme="light"] .home-service-card p,
+html[data-theme="light"] .home-service-card small,
+html[data-theme="light"] .home-service-card-dark p,
+html[data-theme="light"] .home-service-card-dark small{
+  color:#9A8A7D!important
+}
+html[data-theme="light"] .home-service-card>svg,
+html[data-theme="light"] .home-service-card-dark>svg{
+  color:#8E7461!important
+}
+
+html[data-theme="light"] .store-info-panel{
+  background:#F8F2EC!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+html[data-theme="light"] .store-info-contact{
+  background:#E8DDD4!important;
+  color:#6F5C4D!important;
+  border-color:rgba(111,92,77,.12)!important
+}
