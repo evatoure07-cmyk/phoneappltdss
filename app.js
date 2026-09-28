@@ -75,6 +75,7 @@ let adminHistoryOrders=[];
 let adminHistoryExpanded=false;
 let reviewStaffCache=[];
 let currentReviewRating=5;
+let currentReviewSatisfaction='tres_satisfait';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -488,7 +489,7 @@ async function renderReviews(){
     const r=reviewByOrder.get(String(o.id));
     if(r){
       const names=[r.employee_1_id,r.employee_2_id].filter(Boolean).map(id=>staffById.get(String(id))||'Employé LTD');
-      return `<article class="review-order-card reviewed"><div class="review-order-top"><div><span class="order-code">#${esc(o.public_code||String(o.id).slice(-6).toUpperCase())}</span><strong>Merci pour votre avis</strong></div><span class="review-stars-static">${'★'.repeat(num(r.rating))}${'☆'.repeat(5-num(r.rating))}</span></div><p>${esc(names.join(' & '))}</p>${r.comment?`<div class="review-comment">“${esc(r.comment)}”</div>`:''}</article>`;
+      return `<article class="review-order-card reviewed"><div class="review-order-top"><div><span class="order-code">#${esc(o.public_code||String(o.id).slice(-6).toUpperCase())}</span><strong>Merci pour votre avis</strong></div><span class="review-stars-static">${'★'.repeat(num(r.rating))}${'☆'.repeat(5-num(r.rating))}</span></div><p>${esc(names.join(' & '))}</p><div class="review-satisfaction-result">${esc(satisfactionLabel(r.satisfaction))}</div></article>`;
     }
     return `<article class="review-order-card"><div class="review-order-top"><div><span class="order-code">#${esc(o.public_code||String(o.id).slice(-6).toUpperCase())}</span><strong>Livraison du ${new Date(o.delivered_at||o.created_at).toLocaleDateString('fr-FR')}</strong></div><span>${money(o.total)}</span></div><p>${o.assigned_name?`Commande prise en charge par ${esc(o.assigned_name)}.`:'Votre commande a été livrée.'}</p><button class="btn primary full" onclick="openDeliveryReview('${o.id}','${esc(o.public_code||'')}')"><i data-lucide="star"></i> Laisser un avis</button></article>`;
   }).join('')||'<div class="empty"><strong>Aucune livraison à noter.</strong><br><br>Après votre prochaine commande livrée, elle apparaîtra ici.</div>';
@@ -499,12 +500,18 @@ window.openDeliveryReview=async(orderId,code)=>{
   if(!demo.profile||isStaff())return;
   if(!reviewStaffCache.length)reviewStaffCache=await getReviewStaff();
   currentReviewRating=5;
+  currentReviewSatisfaction='tres_satisfait';
   const staff=reviewStaffCache;
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">AVIS LIVRAISON</span><h3>${code?'Commande #'+esc(code):'Votre livraison'}</h3><p class="page-intro">Qui vous a livré ? Sélectionnez une ou deux personnes, puis attribuez votre note.</p>
     <div class="review-employee-grid">${staff.map(s=>`<label class="review-employee-card"><input type="checkbox" class="review-employee-check" value="${s.id}" onchange="limitReviewEmployees(this)"><span class="review-avatar">${s.avatar_url?`<img src="${esc(s.avatar_url)}" alt="">`:esc(String(s.name||'?').slice(0,1).toUpperCase())}</span><span><strong>${esc(s.name)}</strong><small>${esc(roleLabel(s.staff_role||'employee'))}</small></span><i data-lucide="check"></i></label>`).join('')||'<div class="empty">Aucun employé disponible.</div>'}</div>
     <div class="review-selected-count" id="reviewSelectedCount">0 / 2 sélectionné</div>
     <div class="review-rating"><span class="field-label">Votre note</span><div class="review-stars">${[1,2,3,4,5].map(n=>`<button type="button" class="active" data-rating="${n}" onclick="setReviewRating(${n})">★</button>`).join('')}</div><strong id="reviewRatingLabel">5 / 5</strong></div>
-    <div class="form-group"><label>Commentaire (facultatif)</label><textarea id="reviewComment" maxlength="500" placeholder="Un petit mot sur votre livraison…"></textarea></div>
+    <div class="review-satisfaction"><span class="field-label">Votre satisfaction</span><div class="review-satisfaction-grid">
+      <button type="button" class="active" data-satisfaction="tres_satisfait" onclick="setReviewSatisfaction('tres_satisfait')">Très satisfait</button>
+      <button type="button" data-satisfaction="satisfait" onclick="setReviewSatisfaction('satisfait')">Satisfait</button>
+      <button type="button" data-satisfaction="moyennement_satisfait" onclick="setReviewSatisfaction('moyennement_satisfait')">Moyennement satisfait</button>
+      <button type="button" data-satisfaction="insatisfait" onclick="setReviewSatisfaction('insatisfait')">Insatisfait</button>
+    </div></div>
     <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="submitDeliveryReview('${orderId}')">Envoyer mon avis</button></div>`);
   iconRefresh();
 };
@@ -518,15 +525,19 @@ window.limitReviewEmployees=el=>{
 
 window.setReviewRating=n=>{
   currentReviewRating=Math.max(1,Math.min(5,num(n)));
-  $$('.review-stars button').forEach(b=>b.classList.toggle('active',num(b.dataset.rating)<=currentReviewRating));
+  $('.review-stars button').forEach(b=>b.classList.toggle('active',num(b.dataset.rating)<=currentReviewRating));
   if($('#reviewRatingLabel'))$('#reviewRatingLabel').textContent=`${currentReviewRating} / 5`;
+};
+window.setReviewSatisfaction=value=>{
+  if(!['tres_satisfait','satisfait','moyennement_satisfait','insatisfait'].includes(value))return;
+  currentReviewSatisfaction=value;
+  $('.review-satisfaction-grid button').forEach(b=>b.classList.toggle('active',b.dataset.satisfaction===value));
 };
 
 window.submitDeliveryReview=async orderId=>{
   const selected=$$('.review-employee-check:checked').map(x=>x.value);
   if(selected.length<1||selected.length>2)return toast('Sélectionnez une ou deux personnes.');
-  const comment=($('#reviewComment')?.value||'').trim();
-  const row={order_id:orderId,reviewer_id:demo.profile.id,employee_1_id:selected[0],employee_2_id:selected[1]||null,rating:currentReviewRating,comment:comment||null};
+  const row={order_id:orderId,reviewer_id:demo.profile.id,employee_1_id:selected[0],employee_2_id:selected[1]||null,rating:currentReviewRating,satisfaction:currentReviewSatisfaction,comment:null};
   if(hasSupabase){
     const {error}=await sb.from('delivery_reviews').insert(row);
     if(error){
@@ -1001,7 +1012,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.12.2';
+window.LTD_BUILD='8.13.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1023,6 +1034,9 @@ $('#staffHomeProfileBtn')?.addEventListener('click',()=>editProfile());
 $('#staffAccountShortcut')?.addEventListener('click',()=>showAccount());
 $('#staffAdminShortcut')?.addEventListener('click',()=>canManageAnything()?nav('admin'):toast('Aucun accès administration.'));
 $('#staffOrdersShortcut')?.addEventListener('click',()=>{if(!can('orders_view'))return toast('Votre rôle n’a pas accès aux commandes.');document.getElementById('staffHomeOrdersWrap')?.scrollIntoView({behavior:'smooth'});});
+function satisfactionLabel(v){
+  return ({tres_satisfait:'Très satisfait',satisfait:'Satisfait',moyennement_satisfait:'Moyennement satisfait',insatisfait:'Insatisfait'})[v]||'Satisfait';
+}
 function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Employé',manager:'Responsable',admin:'Direction'})[r]||r}
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
@@ -1153,7 +1167,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-admin]');if(!a)return;
   const perm=a.dataset.perm;if(perm&&!uiCan(perm))return toast('Ce rôle n’a pas cet accès.');
   if(isPreviewMode())return toast('Mode aperçu : les outils sont visibles mais les modifications sont désactivées.');
-  ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,productmonth:adminProductOfMonth,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,accounts:adminAccounts,team:adminAccounts,permissions:adminPermissions,customers:adminAccounts,partnerships:adminPartnerships})[a.dataset.admin]?.();
+  ({announcements:adminAnnouncements,announcement:adminAnnouncement,product:()=>adminProduct(),products:adminProducts,productmonth:adminProductOfMonth,packs:adminPacks,promotion:adminPromotion,recruitment:adminRecruitment,contacts:adminContacts,settings:adminSettings,accounts:adminAccounts,team:adminAccounts,permissions:adminPermissions,customers:adminAccounts,partnerships:adminPartnerships,reviews:adminReviews})[a.dataset.admin]?.();
 });
 async function adminAnnouncements(){
   const list=await getAnnouncements(true);demo.announcements=list;
@@ -1357,6 +1371,37 @@ async function adminPermissions(role='vendeur_novice'){
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Permissions des rôles</h3><div class="form-group"><label>Rôle à configurer</label><select id="permissionRole">${Object.entries(STAFF_ROLES).filter(([k])=>!['patron','copatron'].includes(k)).map(([k,v])=>`<option value="${k}" ${k===role?'selected':''}>${esc(v)}</option>`).join('')}</select></div><div class="permission-grid">${PERMISSION_DEFS.map(p=>`<label class="permission-row"><div><strong>${esc(p.label)}</strong><span>${esc(p.desc)}</span></div><input type="checkbox" class="perm-check" value="${p.key}" ${enabled.includes(p.key)?'checked':''}></label>`).join('')}</div><div class="modal-actions"><button class="btn primary" onclick="saveRolePermissions()">Enregistrer</button></div>`);$('#permissionRole').addEventListener('change',e=>adminPermissions(e.target.value));
 }
 window.saveRolePermissions=async()=>{const role=$('#permissionRole').value,perms=$$('.perm-check:checked').map(x=>x.value);if(hasSupabase){const{error}=await sb.rpc('admin_set_role_permissions',{p_staff_role:role,p_permissions:perms});if(error)return toast(error.message)}toast('Permissions enregistrées.');adminPermissions(role);};
+
+
+async function adminReviews(){
+  if(!isDirection())return toast('Accès réservé à la direction.');
+  let list=[];
+  if(hasSupabase){
+    const {data,error}=await sb.rpc('get_direction_reviews');
+    if(error)return toast(error.message||'Impossible de charger les avis.');
+    list=data||[];
+  }else{
+    list=storageGet('ltd_delivery_reviews',[]);
+  }
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">DIRECTION</span><h3>Avis clients</h3><p class="page-intro">Consultez les notes laissées après les livraisons et supprimez les avis abusifs ou troll.</p>
+    <div class="stack direction-reviews-list">${list.map(r=>{
+      const names=[r.employee_1_name,r.employee_2_name].filter(Boolean).join(' & ')||'Employé LTD';
+      return `<article class="direction-review-card"><div class="direction-review-top"><div><span class="order-code">#${esc(r.public_code||'COMMANDE')}</span><strong>${esc(r.customer_name||'Client')}</strong></div><button class="icon-btn danger" onclick="deleteDirectionReview('${r.id}')" title="Supprimer"><i data-lucide="trash-2"></i></button></div><div class="direction-review-stars">${'★'.repeat(num(r.rating))}${'☆'.repeat(5-num(r.rating))}</div><div class="direction-review-satisfaction">${esc(satisfactionLabel(r.satisfaction))}</div><p>${esc(names)}</p><small>${new Date(r.created_at).toLocaleString('fr-FR')}</small></article>`;
+    }).join('')||'<div class="empty">Aucun avis pour le moment.</div>'}</div>`);
+  iconRefresh();
+}
+window.deleteDirectionReview=async id=>{
+  if(!isDirection())return toast('Accès réservé à la direction.');
+  if(!confirm('Supprimer cet avis ?'))return;
+  if(hasSupabase){
+    const {error}=await sb.from('delivery_reviews').delete().eq('id',id);
+    if(error)return toast(error.message||'Suppression impossible.');
+  }else{
+    const list=storageGet('ltd_delivery_reviews',[]).filter(r=>String(r.id)!==String(id));
+    storageSet('ltd_delivery_reviews',list);
+  }
+  toast('Avis supprimé.');adminReviews();
+};
 
 async function adminPromotion(){
   const list=await getPromotions(true);demo.promotions=list;
