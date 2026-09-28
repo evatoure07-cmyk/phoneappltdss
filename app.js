@@ -333,8 +333,8 @@ function nav(name){
   if(name==='admin'&&!uiCanManageAnything())return toast('Ce rôle n’a pas accès à l’administration.');
   if(name==='employees'&&!isDirection())return toast('La liste des employés est réservée à la direction.');
   if(name==='partnerships'&&!isDirection())return toast('Les demandes de partenariat sont réservées à la direction.');
-  $('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
-  $('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
+  $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
+  $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
   if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='reviews')renderReviews();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
@@ -608,7 +608,7 @@ function productHTML(p){
 }
 $('#productSearch')?.addEventListener('input',renderShopProducts);
 document.addEventListener('click',e=>{
-  const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShopProducts();$('[data-cat]').forEach(x=>x.classList.toggle('active',x.dataset.cat===activeCategory));return}
+  const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShopProducts();$$('[data-cat]').forEach(x=>x.classList.toggle('active',x.dataset.cat===activeCategory));return}
   const m=e.target.closest('[data-qminus]');if(m){adjustCardQty(m.dataset.qminus,-1);return}
   const p=e.target.closest('[data-qplus]');if(p){adjustCardQty(p.dataset.qplus,1);return}
   const info=e.target.closest('[data-packinfo]');if(info){showPackInfo(info.dataset.packinfo);return}
