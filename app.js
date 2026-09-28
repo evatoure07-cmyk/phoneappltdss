@@ -419,11 +419,36 @@ function applySettingsToUI(){
   $('#shopClosedBanner')?.classList.toggle('hidden',open);
 }
 
+async function renderPopularPodium(){
+  const target=$('#popularPodium');if(!target)return;
+  const rows=await getPopularProducts(3);
+  if(!rows.length){
+    target.innerHTML='<div class="popular-podium-empty"><i data-lucide="trophy"></i><strong>Le podium ouvrira avec les premières vraies ventes.</strong><span>Les 3 produits les plus commandés apparaîtront automatiquement ici.</span></div>';
+    iconRefresh();return;
+  }
+  const products=demo.products.length?demo.products:await getProducts();
+  const ranked=rows.map((row,index)=>{
+    const product=products.find(p=>String(p.id)===String(row.product_id));
+    return product?{...product,rank:index+1,sold_quantity:num(row.sold_quantity)}:null;
+  }).filter(Boolean);
+  const display=[ranked.find(x=>x.rank===2),ranked.find(x=>x.rank===1),ranked.find(x=>x.rank===3)].filter(Boolean);
+  target.innerHTML=display.map(p=>`<button class="podium-card podium-rank-${p.rank}" onclick="openCatalogProduct('${p.id}')">
+    <div class="podium-crown">${p.rank===1?'<i data-lucide="crown"></i>':''}</div>
+    <div class="podium-product-visual">${esc(p.emoji||'🛒')}</div>
+    <div class="podium-rank-badge">#${p.rank}</div>
+    <strong>${esc(p.name)}</strong>
+    <span>${p.sold_quantity} unité${p.sold_quantity>1?'s':''} commandée${p.sold_quantity>1?'s':''}</span>
+    <div class="podium-base"><b>${p.rank}</b></div>
+  </button>`).join('');
+  iconRefresh();
+}
+
 async function renderHome(){
   await getSettings(); applySettingsToUI();
   const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
   demo.products=products;
   await renderPromoBanner();
+  await renderPopularPodium();
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
   $('#homeMonthProducts').innerHTML=packMonth?homeProductHTML(packMonth):'<div class="empty wide-empty">Aucun pack du mois n’est sélectionné pour le moment.</div>';
@@ -604,7 +629,7 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');i
 
 async function renderShop(){
   await getSettings();
-  const [all,promos,popularRows]=await Promise.all([getProducts(),getPromotions(),getPopularProducts(6)]);
+  const [all,promos,popularRows]=await Promise.all([getProducts(),getPromotions(),getPopularProducts(3)]);
   const popularMap=new Map(popularRows.map((row,index)=>[String(row.product_id),{rank:index+1,qty:num(row.sold_quantity)}]));
   demo.products=all.map(p=>{
     const pop=popularMap.get(String(p.id));
@@ -1032,7 +1057,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.14.0';
+window.LTD_BUILD='8.15.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
