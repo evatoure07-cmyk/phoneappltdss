@@ -1309,3 +1309,29 @@ html[data-theme="light"] .review-satisfaction-grid button.active{
   color:#8E7461!important;
   border-color:#B58A50!important
 }
+
+
+/* ===== V8.14 — automatic popularity ===== */
+.product-card.auto-popular-product{
+  position:relative;
+}
+.popular-ribbon{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:4;
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:5px 8px;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  color:#1a1209!important;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+  box-shadow:0 6px 16px rgba(0,0,0,.14);
+}
+html[data-theme="light"] .popular-ribbon{
+  color:#fffaf5!important;
+  background:linear-gradient(135deg,#B58A50,#9B7446)!important;
+}
