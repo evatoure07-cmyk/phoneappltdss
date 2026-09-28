@@ -885,7 +885,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.11.1';
+window.LTD_BUILD='8.11.2';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1244,7 +1244,7 @@ window.saveRolePermissions=async()=>{const role=$('#permissionRole').value,perms
 
 async function adminPromotion(){
   const list=await getPromotions(true);demo.promotions=list;
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Promotions</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="badge-percent"></i></div><div><strong>${esc(p.name)}</strong><p>${promoDescription(p)}${p.code?` • Code ${esc(p.code)}`:' • Automatique'} • ${p.active?'Active':'Inactive'}</p></div><div class="catalog-actions"><button onclick="togglePromotion('${p.id}',${p.active!==false})"><i data-lucide="${p.active!==false?'pause':'play'}"></i></button></div></div>`).join('')||'<div class="empty">Aucune promotion créée.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="showPromotionForm()"><i data-lucide="plus"></i> Nouvelle promotion</button>`);iconRefresh();
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Promotions</h3><div class="stack">${list.map(p=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="badge-percent"></i></div><div><strong>${esc(p.name)}</strong><p>${promoDescription(p)}${p.code?` • Code ${esc(p.code)}`:' • Automatique'} • ${p.active?'Active':'Inactive'}</p></div><div class="catalog-actions"><button onclick="togglePromotion('${p.id}',${p.active!==false})" title="${p.active!==false?'Désactiver':'Activer'}"><i data-lucide="${p.active!==false?'pause':'play'}"></i></button><button onclick="deletePromotion('${p.id}')" title="Supprimer"><i data-lucide="trash-2"></i></button></div></div>`).join('')||'<div class="empty">Aucune promotion créée.</div>'}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="showPromotionForm()"><i data-lucide="plus"></i> Nouvelle promotion</button>`);iconRefresh();
 }
 window.showPromotionForm=async()=>{
   const products=(await getProducts(true)).filter(p=>!p.is_pack&&p.active!==false);
@@ -1269,6 +1269,20 @@ window.savePromotion=async()=>{
   toast('Promotion créée.');await renderPromoBanner();adminPromotion();
 };
 window.togglePromotion=async(id,current)=>{if(hasSupabase){const{error}=await sb.from('promotions').update({active:!current}).eq('id',id);if(error)return toast(error.message)}else{const p=demo.promotions.find(x=>String(x.id)===String(id));if(p)p.active=!current;storageSet(LS.promotions,demo.promotions)}toast(current?'Promotion désactivée.':'Promotion activée.');adminPromotion();};
+window.deletePromotion=async id=>{
+  if(!confirm('Supprimer définitivement cette promotion ?'))return;
+  if(hasSupabase){
+    const {error}=await sb.from('promotions').delete().eq('id',id);
+    if(error)return toast(error.message||'Suppression impossible.');
+  }else{
+    demo.promotions=demo.promotions.filter(p=>String(p.id)!==String(id));
+    storageSet(LS.promotions,demo.promotions);
+  }
+  demo.promotions=demo.promotions.filter(p=>String(p.id)!==String(id));
+  await renderPromoBanner();
+  toast('Promotion supprimée.');
+  adminPromotion();
+};
 async function adminContacts(){const list=await getContacts();openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Contacts</h3><div class="stack">${list.map(c=>`<div class="catalog-row"><div class="catalog-icon"><i data-lucide="phone"></i></div><div><strong>${esc(c.label)} — ${esc(c.name)}</strong><p>${esc(c.phone)}</p></div><div class="catalog-actions"><button onclick="editContact('${c.id}')"><i data-lucide="pencil"></i></button></div></div>`).join('')}</div><button class="btn primary" style="width:100%;margin-top:13px" onclick="editContact('')">Ajouter un contact</button>`);demo.contacts=list;iconRefresh()}
 window.editContact=id=>{const c=demo.contacts.find(x=>String(x.id)===String(id));openModal(`<button class="icon-btn close" onclick="adminContacts()">×</button><h3>${c?'Modifier':'Ajouter'} un contact</h3><div class="form-group"><label>Fonction</label><input id="contactLabel" value="${esc(c?.label||'')}"></div><div class="form-group"><label>Nom</label><input id="contactName" value="${esc(c?.name||'')}"></div><div class="form-group"><label>Numéro</label><input id="contactPhone" value="${esc(c?.phone||'')}"></div><div class="form-group"><label>Ordre</label><input id="contactOrder" type="number" value="${num(c?.sort_order||1)}"></div><div class="modal-actions"><button class="btn primary" onclick="saveContact('${id}')">Enregistrer</button></div>`)};
 window.saveContact=async id=>{const x={label:$('#contactLabel').value.trim(),name:$('#contactName').value.trim(),phone:$('#contactPhone').value.trim(),sort_order:num($('#contactOrder').value),active:true};if(!x.label||!x.name||!x.phone)return toast('Complétez les champs.');if(hasSupabase){const q=id?sb.from('contacts').update(x).eq('id',id):sb.from('contacts').insert(x);const{error}=await q;if(error)return toast(error.message)}else{if(id){const i=demo.contacts.findIndex(c=>String(c.id)===String(id));demo.contacts[i]={...demo.contacts[i],...x}}else demo.contacts.push({...x,id:uid('c')});storageSet(LS.contacts,demo.contacts)}closeModal();renderHome();toast('Contact enregistré.')};
