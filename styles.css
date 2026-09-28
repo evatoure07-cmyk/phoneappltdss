@@ -1212,3 +1212,100 @@ html[data-theme="light"] .review-stars button.active,
 html[data-theme="light"] .review-stars-static{
   color:#B58A50!important
 }
+
+
+/* ===== V8.13 — satisfaction-only reviews + direction moderation ===== */
+.review-satisfaction{
+  margin:12px 0;
+  padding:13px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:var(--surface2)
+}
+.review-satisfaction .field-label{
+  display:block;
+  margin-bottom:9px
+}
+.review-satisfaction-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:7px
+}
+.review-satisfaction-grid button{
+  border:1px solid var(--line);
+  background:var(--surface);
+  color:var(--muted);
+  border-radius:11px;
+  padding:10px 8px;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer
+}
+.review-satisfaction-grid button.active{
+  border-color:rgba(217,169,78,.55);
+  background:rgba(217,169,78,.11);
+  color:var(--gold)
+}
+.review-satisfaction-result,
+.direction-review-satisfaction{
+  display:inline-flex;
+  align-items:center;
+  width:max-content;
+  max-width:100%;
+  border-radius:999px;
+  padding:5px 8px;
+  background:rgba(217,169,78,.09);
+  border:1px solid rgba(217,169,78,.22);
+  color:var(--gold)!important;
+  font-size:8px;
+  font-weight:900
+}
+
+.direction-review-card{
+  border:1px solid var(--line);
+  background:var(--surface);
+  border-radius:16px;
+  padding:13px
+}
+.direction-review-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px
+}
+.direction-review-top strong{
+  display:block;
+  margin-top:4px;
+  font-size:11px
+}
+.direction-review-stars{
+  margin:10px 0 7px;
+  color:var(--gold);
+  font-size:17px;
+  letter-spacing:1px
+}
+.direction-review-card p{
+  margin:9px 0 4px;
+  color:var(--muted);
+  font-size:9px
+}
+.direction-review-card small{
+  color:var(--muted);
+  font-size:8px
+}
+
+html[data-theme="light"] .review-satisfaction,
+html[data-theme="light"] .direction-review-card{
+  background:#F8F2EC!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+html[data-theme="light"] .review-satisfaction-grid button{
+  background:#FFF9F3!important;
+  color:#9A8A7D!important;
+  border-color:rgba(111,92,77,.12)!important
+}
+html[data-theme="light"] .review-satisfaction-grid button.active{
+  background:#E3D1C1!important;
+  color:#8E7461!important;
+  border-color:#B58A50!important
+}
