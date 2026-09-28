@@ -71,6 +71,8 @@ let staffFilter = 'active';
 let realtimeChannel = null;
 let modalLocked = false;
 let passwordPromptedFor = null;
+let adminHistoryOrders=[];
+let adminHistoryExpanded=false;
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -801,7 +803,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.9.1';
+window.LTD_BUILD='8.10.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -882,6 +884,46 @@ $('#partnerForm')?.addEventListener('submit',async e=>{
   e.target.reset(); toast('Votre demande de partenariat a bien été envoyée.');
 });
 
+function adminHistoryMatches(order){
+  const q=($('#adminHistorySearch')?.value||'').trim().toLowerCase();
+  const date=($('#adminHistoryDate')?.value||'').trim();
+  const time=($('#adminHistoryTime')?.value||'').trim();
+  const d=new Date(order.created_at);
+  const localDate=Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const localTime=Number.isNaN(d.getTime())?'':`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const text=`${order.public_code||''} ${order.customer_name||''} ${order.customer_phone||''} ${order.delivery_address||''} ${statusLabel(order.status)}`.toLowerCase();
+  return (!q||text.includes(q))&&(!date||localDate===date)&&(!time||localTime.startsWith(time));
+}
+function adminHistoryCompact(order){
+  const code=order.public_code||`SS-${String(order.id).slice(-5).toUpperCase()}`;
+  return `<details class="admin-history-item">
+    <summary class="admin-history-summary">
+      <div><strong>#${esc(code)} • ${esc(order.customer_name||'Client')}</strong><span>${statusLabel(order.status)} • ${money(order.total)}</span></div>
+      <div class="admin-history-meta"><span>${formatDate(order.created_at)}</span><i data-lucide="chevron-down"></i></div>
+    </summary>
+    <div class="admin-history-body">${orderHTML(order,true)}</div>
+  </details>`;
+}
+window.renderAdminHistory=()=>{
+  const target=$('#adminHistoryList');if(!target)return;
+  const filtered=(adminHistoryOrders||[]).filter(adminHistoryMatches);
+  const visible=adminHistoryExpanded?filtered:filtered.slice(0,3);
+  target.innerHTML=visible.map(adminHistoryCompact).join('')||'<div class="empty">Aucune commande trouvée.</div>';
+  const btn=$('#adminHistoryToggle');
+  if(btn){
+    btn.classList.toggle('hidden',filtered.length<=3);
+    btn.textContent=adminHistoryExpanded?'Voir moins':'Voir plus';
+  }
+  iconRefresh();
+};
+window.toggleAdminHistory=()=>{adminHistoryExpanded=!adminHistoryExpanded;renderAdminHistory();};
+window.resetAdminHistoryFilters=()=>{
+  if($('#adminHistorySearch'))$('#adminHistorySearch').value='';
+  if($('#adminHistoryDate'))$('#adminHistoryDate').value='';
+  if($('#adminHistoryTime'))$('#adminHistoryTime').value='';
+  adminHistoryExpanded=false;renderAdminHistory();
+};
+
 async function renderAdmin(){
   if(!uiCanManageAnything()){ $('#adminStats').innerHTML='';$('#adminActivity').innerHTML='<div class="empty">Ce rôle ne possède aucun accès d’administration.</div>';return }
   $$('#adminView [data-perm]').forEach(card=>card.classList.toggle('hidden-by-permission',!uiCan(card.dataset.perm)));
@@ -896,7 +938,16 @@ async function renderAdmin(){
   const customers=new Map(),products=new Map();for(const o of delivered){const key=o.customer_name||'Client';customers.set(key,(customers.get(key)||0)+num(o.total));for(const i of (o.order_items||o.items||[])){const name=i.product_name||i.name||'Article';products.set(name,(products.get(name)||0)+num(i.quantity||i.qty));}}
   const topCustomer=[...customers.entries()].sort((a,b)=>b[1]-a[1])[0],topProduct=[...products.entries()].sort((a,b)=>b[1]-a[1])[0];
   $('#adminStats').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="kpi-card"><span>CA livré</span><strong>${money(revenue)}</strong></div><div class="kpi-card"><span>Commandes</span><strong>${orders.length}</strong></div><div class="kpi-card"><span>En cours</span><strong>${active.length}</strong></div><div class="kpi-card"><span>Panier moyen</span><strong>${money(avg)}</strong></div><div class="kpi-card"><span>Livraisons encaissées</span><strong>${money(fees)}</strong></div><div class="kpi-card"><span>Clients servis</span><strong>${customers.size}</strong></div>`:'';
-  $('#adminActivity').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>${orders.slice(0,6).map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune activité.</div>'}`:'<div class="empty">Les outils autorisés pour votre rôle sont disponibles au-dessus.</div>';
+  adminHistoryOrders=orders;
+  $('#adminActivity').innerHTML=(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))?`<div class="order-detail-grid"><div class="mini-info"><span>Article le + vendu</span><strong>${topProduct?`${esc(topProduct[0])} • ${topProduct[1]} unités`:'—'}</strong></div><div class="mini-info"><span>Client le + actif</span><strong>${topCustomer?`${esc(topCustomer[0])} • ${money(topCustomer[1])}`:'—'}</strong></div></div>
+  <div class="admin-history-head"><div><span class="eyebrow">HISTORIQUE</span><h3>Commandes récentes</h3></div><button class="icon-btn" onclick="resetAdminHistoryFilters()" title="Réinitialiser"><i data-lucide="rotate-ccw"></i></button></div>
+  <div class="admin-history-tools">
+    <div class="search-wrap"><i data-lucide="search"></i><input id="adminHistorySearch" placeholder="Code, client, adresse…" oninput="renderAdminHistory()"></div>
+    <div class="admin-history-date-row"><div class="form-group"><label>Date</label><input id="adminHistoryDate" type="date" onchange="renderAdminHistory()"></div><div class="form-group"><label>Heure</label><input id="adminHistoryTime" type="time" onchange="renderAdminHistory()"></div></div>
+  </div>
+  <div id="adminHistoryList"></div>
+  <button class="btn ghost hidden" id="adminHistoryToggle" style="width:100%;margin-top:10px" onclick="toggleAdminHistory()">Voir plus</button>`:'<div class="empty">Les outils autorisés pour votre rôle sont disponibles au-dessus.</div>';
+  if(uiCan('stats_view')||(!isPreviewMode()&&isDirection()))renderAdminHistory();
   iconRefresh();
 }
 $('#refreshAdmin').addEventListener('click',renderAdmin);
