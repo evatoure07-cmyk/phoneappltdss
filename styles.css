@@ -944,3 +944,17 @@ html[data-theme="light"] .store-info-contact{
   color:#6F5C4D!important;
   border-color:rgba(111,92,77,.12)!important
 }
+
+
+/* ===== V8.11.6 — light hero primary button readability ===== */
+html[data-theme="light"] .editorial-primary,
+html[data-theme="light"] .editorial-primary span,
+html[data-theme="light"] .editorial-primary svg{
+  color:#6F5C4D!important;
+  stroke:#6F5C4D!important;
+}
+html[data-theme="light"] .editorial-primary{
+  background:#FFF9F3!important;
+  border-color:rgba(111,92,77,.12)!important;
+  box-shadow:0 8px 20px rgba(111,92,77,.08)!important;
+}
