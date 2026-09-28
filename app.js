@@ -506,7 +506,15 @@ function addToCart(id){
   const row=demo.cart.find(x=>String(x.id)===String(id)); if(row)row.qty=Math.min((p.stock??999),row.qty+qty);else demo.cart.push({...p,qty});
   if(input)input.value=1; updateCartCount();toast(`${qty} × ${p.name} ajouté${qty>1?'s':''}`);
 }
-function updateCartCount(){ const count=demo.cart.reduce((a,b)=>a+b.qty,0); $('#cartCount') && ($('#cartCount').textContent=count); $('#homeCartCount') && ($('#homeCartCount').textContent=count); $('#bottomCartCount') && ($('#bottomCartCount').textContent=count); $('#packsCartCount') && ($('#packsCartCount').textContent=count); }
+function updateCartCount(){
+  const count=demo.cart.reduce((a,b)=>a+b.qty,0);
+  ['#cartCount','#homeCartCount','#bottomCartCount','#packsCartCount'].forEach(sel=>{
+    const el=$(sel);if(!el)return;
+    const changed=el.textContent!==String(count);
+    el.textContent=count;
+    if(changed){el.classList.remove('cart-bump');void el.offsetWidth;el.classList.add('cart-bump');}
+  });
+}
 $('#cartButton')?.addEventListener('click',showCart);
 $('#packsCartButton')?.addEventListener('click',showCart);
 $('#homeCartShortcut')?.addEventListener('click',showCart);
@@ -877,7 +885,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.11.0';
+window.LTD_BUILD='8.11.1';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
