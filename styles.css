@@ -1732,3 +1732,28 @@ html[data-theme="light"] .staff-ranking-card.rank-1 .staff-rank-number{
 html[data-theme="light"] .loyalty-reward-option.active{
   background:#E3D1C1!important;border-color:#B58A50!important
 }
+
+
+/* ===== V9.0.1 — instant action feedback ===== */
+.order-card.order-syncing{
+  position:relative;
+  transition:opacity .12s ease,transform .12s ease;
+}
+.order-card.order-syncing::after{
+  content:"";
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--gold);
+  animation:ltdSyncPulse .75s ease-in-out infinite alternate;
+}
+@keyframes ltdSyncPulse{
+  from{opacity:.35;transform:scale(.8)}
+  to{opacity:1;transform:scale(1.15)}
+}
+.order-actions button{
+  touch-action:manipulation;
+}
