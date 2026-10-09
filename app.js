@@ -2022,9 +2022,6 @@ function scheduleRealtimeRefresh(table){
     if(table==='contacts'&&$('#contactView')?.classList.contains('active'))await renderContact();
     if(table==='partnership_requests'&&$('#partnershipsView')?.classList.contains('active'))await renderPartnershipsPage();
     if(table==='product_favorites'&&$('#shopView')?.classList.contains('active'))await renderShop();
-    if(table==='loyalty_rewards'){
-      if($('#ordersView')?.classList.contains('active'))await renderOrders();
-    }
     if(table==='delivery_reviews'){
       if(uiIsStaff())await renderStaffHome();
       if($('#reviewsView')?.classList.contains('active'))await renderReviews();
@@ -2073,7 +2070,7 @@ function initRealtime(){
   if(!hasSupabase)return;
   if(realtimeChannel){try{sb.removeChannel(realtimeChannel)}catch{}realtimeChannel=null}
   let ch=sb.channel('ltd-sandy-live-v9');
-  ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests','applications','delivery_reviews','loyalty_rewards','product_favorites'].forEach(table=>{
+  ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests','applications','delivery_reviews','product_favorites'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleRealtimeRefresh(table));
   });
   realtimeChannel=ch.subscribe();
