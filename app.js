@@ -830,43 +830,90 @@ function computeDiscount(subtotal,mode,promo){
 }
 async function showCart(){
   if(!demo.cart.length)return openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Votre panier</h3><div class="empty">Votre panier est vide.</div>`);
-  await getSettings(); demo.promotions=await getPromotions(); if(!currentPromo)currentPromo=activeAutoPromo();
+  await getSettings();
+  const [promos,rewards]=await Promise.all([
+    getPromotions(),
+    demo.profile&&!isStaff()?getLoyaltyRewards():Promise.resolve([])
+  ]);
+  demo.promotions=promos;
+  demo.loyaltyRewards=rewards;
+  if(!currentPromo)currentPromo=activeAutoPromo();
+  if(currentRewardId&&!rewards.some(r=>String(r.id)===String(currentRewardId)))currentRewardId=null;
   currentOrderMode=settings.delivery_enabled?'delivery':'pickup';
   renderCartModal();
 }
+function selectedLoyaltyReward(){
+  return (demo.loyaltyRewards||[]).find(r=>String(r.id)===String(currentRewardId))||null;
+}
+function applyRewardPreview(subtotal,discount,fee,reward){
+  let rewardDiscount=0,nextFee=fee;
+  if(!reward)return {rewardDiscount,nextFee};
+  if(reward.reward_type==='free_delivery')nextFee=0;
+  if(reward.reward_type==='fixed_discount')rewardDiscount=Math.min(Math.max(0,subtotal-discount),num(reward.reward_value));
+  if(reward.reward_type==='percent_discount')rewardDiscount=Math.min(Math.max(0,subtotal-discount),subtotal*num(reward.reward_value)/100);
+  return {rewardDiscount,nextFee};
+}
+function loyaltyRewardsHTML(points){
+  if(!demo.profile||isStaff())return '';
+  const rewards=demo.loyaltyRewards||[];
+  if(!rewards.length)return '<div class="loyalty-rewards-empty">Aucune récompense configurée pour le moment.</div>';
+  return `<div class="loyalty-reward-picker"><div class="loyalty-reward-head"><div><small>RÉCOMPENSES FIDÉLITÉ</small><strong>${points} points disponibles</strong></div>${currentRewardId?'<button onclick="selectLoyaltyReward(\'\')">Ne pas utiliser</button>':''}</div><div class="loyalty-reward-options">${rewards.map(r=>{
+    const enough=points>=num(r.points_required);
+    const compatible=!(r.reward_type==='free_delivery'&&currentOrderMode!=='delivery');
+    const active=String(currentRewardId)===String(r.id);
+    return `<button type="button" class="loyalty-reward-option ${active?'active':''}" onclick="selectLoyaltyReward('${r.id}')" ${enough&&compatible?'':'disabled'}><span><b>${num(r.points_required)} pts</b><strong>${esc(r.label)}</strong><small>${esc(rewardDescription(r))}</small></span><i data-lucide="${active?'circle-check-big':enough&&compatible?'gift':'lock-keyhole'}"></i></button>`;
+  }).join('')}</div></div>`;
+}
 function renderCartModal(){
-  const subtotal=cartSubtotal(), pts=num(demo.profile?.loyalty_points), eligible=pts>=num(settings.loyalty_reward_points);
+  const subtotal=cartSubtotal(),pts=num(demo.profile?.loyalty_points);
   const promoCalc=computeDiscount(subtotal,currentOrderMode,currentPromo);
-  const fee=currentOrderMode==='delivery'&&!promoCalc.freeDelivery?num(settings.delivery_fee):0;
   openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Votre panier</h3>
     <div>${demo.cart.map(x=>`<div class="cart-row"><div class="cart-main"><strong>${esc(x.name)}</strong><span class="cart-price">${money(x.price)} l’unité • ${money(num(x.price)*num(x.qty))}</span><button class="remove-link" onclick="removeCartItem('${x.id}')">Supprimer</button></div><div class="cart-qty"><button onclick="changeQty('${x.id}',-1)">−</button><input value="${x.qty}" type="number" min="1" max="999" inputmode="numeric" onchange="setCartQty('${x.id}',this.value)"><button onclick="changeQty('${x.id}',1)">+</button></div></div>`).join('')}</div>
     <div class="delivery-choice">${settings.delivery_enabled?`<button class="choice-card ${currentOrderMode==='delivery'?'active':''}" onclick="setOrderMode('delivery')"><strong>Livraison</strong><span>${money(settings.delivery_fee)} • ${settings.delivery_eta_min}–${settings.delivery_eta_max} min</span></button>`:''}${settings.pickup_enabled?`<button class="choice-card ${currentOrderMode==='pickup'?'active':''}" onclick="setOrderMode('pickup')"><strong>Retrait au LTD</strong><span>Sans frais de livraison</span></button>`:''}</div>
-    <div class="loyalty-box"><strong>${pts} / ${settings.loyalty_reward_points} points fidélité</strong><div>${eligible?'Vous pouvez utiliser votre livraison offerte.':`Encore ${Math.max(0,num(settings.loyalty_reward_points)-pts)} points avant votre prochaine livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,(pts/Math.max(1,num(settings.loyalty_reward_points)))*100)}%"></span></div></div>
+    ${loyaltyRewardsHTML(pts)}
     ${!demo.profile?`<div class="form-group"><label>Prénom & nom</label><input id="orderGuestName" autocomplete="off" placeholder="Votre nom"></div>`:''}
     ${currentOrderMode==='delivery'?`<div class="form-group"><label>Lieu de livraison</label><input id="deliveryAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Ex : domicile, entreprise, parking…"></div>`:''}
     <div class="form-group"><label>Numéro de téléphone</label><input id="orderPhone" value="${esc(demo.profile?.phone||'')}" placeholder="Votre numéro"></div>
     <div class="form-group"><label>Précision pour l’équipe</label><textarea id="orderNote" placeholder="Ex : appelez-moi en arrivant, entrée arrière…"></textarea></div>
-    ${currentOrderMode==='delivery'&&eligible&&!(currentPromo&&currentPromo.discount_type==='free_delivery')?`<label class="checkbox-row"><input type="checkbox" id="redeemPoints" onchange="refreshCartTotals()"> Utiliser ${settings.loyalty_reward_points} points pour offrir la livraison</label>`:''}
     <div class="promo-row"><input id="promoCode" placeholder="Code promo" value="${currentPromo?.code&&!currentPromo.auto_apply?esc(currentPromo.code):''}"><button onclick="applyPromoCode()">Appliquer</button></div><div id="promoMessage" class="subtle">${currentPromo?`Offre appliquée : ${esc(currentPromo.name)}`:''}</div>
     <div class="totals" id="cartTotals"></div>
     ${num(settings.min_order)>0?`<p class="subtle">Minimum de commande : ${money(settings.min_order)}</p>`:''}
     <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Continuer</button><button class="btn primary" id="checkoutBtn" onclick="checkout()" ${settings.business_open?'':'disabled'}>${settings.business_open?'Valider la commande':'Commandes fermées'}</button></div>`);
-  if(!demo.profile) $('.loyalty-box')?.classList.add('hidden');
   refreshCartTotals();
+  iconRefresh();
 }
-window.setOrderMode=mode=>{currentOrderMode=mode;renderCartModal()};
+window.selectLoyaltyReward=id=>{
+  if(!demo.profile||isStaff())return;
+  if(!id){currentRewardId=null;renderCartModal();return}
+  const reward=(demo.loyaltyRewards||[]).find(r=>String(r.id)===String(id));
+  if(!reward)return;
+  if(num(demo.profile.loyalty_points)<num(reward.points_required))return toast('Points fidélité insuffisants.');
+  if(reward.reward_type==='free_delivery'&&currentOrderMode!=='delivery')return toast('Cette récompense concerne la livraison.');
+  currentRewardId=id;renderCartModal();
+};
+window.setOrderMode=mode=>{
+  currentOrderMode=mode;
+  const reward=selectedLoyaltyReward();
+  if(reward?.reward_type==='free_delivery'&&mode!=='delivery')currentRewardId=null;
+  renderCartModal();
+};
 window.changeQty=(id,d)=>{const r=demo.cart.find(x=>String(x.id)===String(id));if(!r)return;setCartQty(id,r.qty+d)};
 window.setCartQty=(id,value)=>{const r=demo.cart.find(x=>String(x.id)===String(id));if(!r)return;let q=Math.floor(num(value));if(q<=0){removeCartItem(id);return}if(r.stock!==null&&r.stock!==undefined)q=Math.min(q,num(r.stock));r.qty=Math.min(999,q);updateCartCount();renderCartModal()};
 window.removeCartItem=id=>{demo.cart=demo.cart.filter(x=>String(x.id)!==String(id));updateCartCount();if(demo.cart.length)renderCartModal();else showCart()};
 window.refreshCartTotals=()=>{
-  const subtotal=cartSubtotal(),promoCalc=computeDiscount(subtotal,currentOrderMode,currentPromo),redeem=Boolean($('#redeemPoints')?.checked);
-  const fee=currentOrderMode==='delivery'&&!promoCalc.freeDelivery&&!redeem?num(settings.delivery_fee):0; const total=Math.max(0,subtotal-promoCalc.discount)+fee;
-  if($('#cartTotals'))$('#cartTotals').innerHTML=`<div class="total-line"><span>Sous-total</span><strong>${money(subtotal)}</strong></div>${promoCalc.discount?`<div class="total-line"><span>Réduction</span><strong>− ${money(promoCalc.discount)}</strong></div>`:''}<div class="total-line"><span>${currentOrderMode==='delivery'?'Livraison':'Retrait'}</span><strong>${fee?money(fee):'Offert'}</strong></div><div class="total-line grand"><span>Total</span><strong>${money(total)}</strong></div>`;
+  const subtotal=cartSubtotal(),promoCalc=computeDiscount(subtotal,currentOrderMode,currentPromo),reward=selectedLoyaltyReward();
+  let fee=currentOrderMode==='delivery'&&!promoCalc.freeDelivery?num(settings.delivery_fee):0;
+  const effect=applyRewardPreview(subtotal,promoCalc.discount,fee,reward);
+  fee=effect.nextFee;
+  const discount=Math.min(subtotal,promoCalc.discount+effect.rewardDiscount);
+  const total=Math.max(0,subtotal-discount)+fee;
+  if($('#cartTotals'))$('#cartTotals').innerHTML=`<div class="total-line"><span>Sous-total</span><strong>${money(subtotal)}</strong></div>${promoCalc.discount?`<div class="total-line"><span>Promotion</span><strong>− ${money(promoCalc.discount)}</strong></div>`:''}${effect.rewardDiscount?`<div class="total-line reward-total"><span>Récompense fidélité</span><strong>− ${money(effect.rewardDiscount)}</strong></div>`:''}<div class="total-line"><span>${currentOrderMode==='delivery'?'Livraison':'Retrait'}</span><strong>${fee?money(fee):'Offert'}</strong></div><div class="total-line grand"><span>Total</span><strong>${money(total)}</strong></div>`;
 };
 window.applyPromoCode=async()=>{
-  const code=($('#promoCode')?.value||'').trim().toUpperCase(); const promos=await getPromotions();
+  const code=($('#promoCode')?.value||'').trim().toUpperCase();const promos=await getPromotions();
   if(!code){currentPromo=activeAutoPromo();renderCartModal();return}
-  const p=promos.find(x=>String(x.code||'').toUpperCase()===code&&!x.auto_apply);if(!p){currentPromo=activeAutoPromo();$('#promoMessage').textContent='Code non reconnu ou expiré.';refreshCartTotals();return}
+  const p=promos.find(x=>String(x.code||'').toUpperCase()===code&&!x.auto_apply);
+  if(!p){currentPromo=activeAutoPromo();$('#promoMessage').textContent='Code non reconnu ou expiré.';refreshCartTotals();return}
   if(cartSubtotal()<num(p.min_subtotal)){toast(`Cette offre nécessite ${money(p.min_subtotal)} de commande.`);return}
   currentPromo=p;renderCartModal();toast('Code promo appliqué.');
 };
@@ -890,17 +937,15 @@ window.submitGuestOrder=async()=>{
     const {data,error}=await sb.rpc('create_guest_order',{p_items:items,p_fulfillment:currentOrderMode,p_address:address,p_phone:phone,p_customer_name:name,p_note:note,p_promo_code:promoCode});
     if(error){console.error(error);return toast(error.message||'La commande n’a pas pu être créée.')}
     await invokeDiscordOrders({action:'created',public_code:data});
-    demo.cart=[];currentPromo=null;guestOrderDraft=null;updateCartCount();
+    demo.cart=[];currentPromo=null;currentRewardId=null;guestOrderDraft=null;updateCartCount();
     openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><span class="eyebrow">COMMANDE ENVOYÉE</span><h3>#${esc(data)}</h3><p class="page-intro">Votre commande a bien été transmise au LTD. Gardez ce numéro si besoin.</p><div class="notice"><i data-lucide="badge-check"></i><div><strong>Sans compte</strong><span>Aucun point fidélité n’est ajouté sur cette commande.</span></div></div><div class="modal-actions"><button class="btn primary" onclick="closeModal();nav('home')">Terminer</button></div>`);
     iconRefresh();
-  }else{
-    toast('La base centrale est nécessaire pour envoyer une commande.');
-  }
+  }else toast('La base centrale est nécessaire pour envoyer une commande.');
 };
 
 window.checkout=async()=>{
   if(!settings.business_open)return toast('Les commandes sont momentanément fermées.');
-  const subtotal=cartSubtotal(); if(subtotal<num(settings.min_order))return toast(`Minimum de commande : ${money(settings.min_order)}.`);
+  const subtotal=cartSubtotal();if(subtotal<num(settings.min_order))return toast(`Minimum de commande : ${money(settings.min_order)}.`);
   if(!demo.profile){
     const name=($('#orderGuestName')?.value||'').trim();
     const phone=($('#orderPhone')?.value||'').trim();
@@ -912,43 +957,51 @@ window.checkout=async()=>{
     guestOrderDraft={name,phone,address,note};
     return showGuestChoice();
   }
-  const phone=($('#orderPhone')?.value||demo.profile.phone||'').trim(); if(!phone)return toast('Indiquez un numéro de téléphone.');
-  const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address; if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
-  const note=($('#orderNote')?.value||'').trim(), redeem=Boolean($('#redeemPoints')?.checked), promoCode=currentPromo?.code||null;
+  const phone=($('#orderPhone')?.value||demo.profile.phone||'').trim();
+  if(!phone)return toast('Indiquez un numéro de téléphone.');
+  const address=currentOrderMode==='delivery'?($('#deliveryAddress')?.value||'').trim():settings.address;
+  if(currentOrderMode==='delivery'&&!address)return toast('Indiquez un lieu de livraison.');
+  const note=($('#orderNote')?.value||'').trim(),promoCode=currentPromo?.code||null;
   const items=demo.cart.map(x=>({product_id:x.id,quantity:x.qty}));
   if(hasSupabase){
-    const {data,error}=await sb.rpc('create_customer_order',{p_items:items,p_fulfillment:currentOrderMode,p_address:address,p_phone:phone,p_note:note,p_redeem_points:redeem,p_promo_code:promoCode});
+    const {data,error}=await sb.rpc('create_customer_order_v2',{p_items:items,p_fulfillment:currentOrderMode,p_address:address,p_phone:phone,p_note:note,p_reward_id:currentRewardId||null,p_promo_code:promoCode});
     if(error){console.error(error);return toast(error.message||'La commande n’a pas pu être créée.')}
     await invokeDiscordOrders({action:'created',public_code:data});
-    await getCurrentProfile(); demo.cart=[];currentPromo=null;updateCartCount();closeModal();toast(`Commande ${data} envoyée.`);nav('orders');
+    await getCurrentProfile();demo.cart=[];currentPromo=null;currentRewardId=null;updateCartCount();closeModal();toast(`Commande ${data} envoyée.`);nav('orders');
   }else{
-    const promoCalc=computeDiscount(subtotal,currentOrderMode,currentPromo); const fee=currentOrderMode==='delivery'&&!promoCalc.freeDelivery&&!redeem?num(settings.delivery_fee):0;
-    if(redeem && num(demo.profile.loyalty_points)<num(settings.loyalty_reward_points))return toast('Points fidélité insuffisants.');
-    if(redeem){demo.profile.loyalty_points-=num(settings.loyalty_reward_points);storageSet(LS.profile,demo.profile)}
-    const o={id:uid('order'),public_code:`SS-${Math.random().toString(36).slice(2,7).toUpperCase()}`,user_id:demo.profile.id,customer_name:demo.profile.display_name,customer_phone:phone,fulfillment:currentOrderMode,delivery_address:address,note,subtotal,discount:promoCalc.discount,delivery_fee:fee,total:Math.max(0,subtotal-promoCalc.discount)+fee,status:'pending',used_loyalty_reward:redeem,loyalty_awarded:false,assigned_to:null,assigned_name:null,eta_min:settings.delivery_eta_min,eta_max:settings.delivery_eta_max,created_at:new Date().toISOString(),items:demo.cart.map(x=>({...x})),events:[{status:'pending',actor_name:demo.profile.display_name||'Client',created_at:new Date().toISOString()}]};
-    demo.orders.unshift(o);storageSet(LS.orders,demo.orders);demo.cart=[];currentPromo=null;updateCartCount();closeModal();toast(`Commande ${o.public_code} envoyée.`);nav('orders');
+    const promoCalc=computeDiscount(subtotal,currentOrderMode,currentPromo),reward=selectedLoyaltyReward();
+    let fee=currentOrderMode==='delivery'&&!promoCalc.freeDelivery?num(settings.delivery_fee):0;
+    const effect=applyRewardPreview(subtotal,promoCalc.discount,fee,reward);fee=effect.nextFee;
+    const discount=Math.min(subtotal,promoCalc.discount+effect.rewardDiscount);
+    if(reward)demo.profile.loyalty_points=Math.max(0,num(demo.profile.loyalty_points)-num(reward.points_required));
+    storageSet(LS.profile,demo.profile);
+    const totalUnits=demo.cart.reduce((a,x)=>a+num(x.qty),0);
+    const o={id:uid('order'),public_code:`SS-${Math.random().toString(36).slice(2,7).toUpperCase()}`,user_id:demo.profile.id,customer_name:demo.profile.display_name,customer_phone:phone,fulfillment:currentOrderMode,delivery_address:address,note,subtotal,discount,delivery_fee:fee,total:Math.max(0,subtotal-discount)+fee,status:'pending',used_loyalty_reward:Boolean(reward),loyalty_points_spent:num(reward?.points_required),loyalty_reward_label:reward?.label||null,loyalty_awarded:false,assigned_to:null,assigned_name:null,eta_min:settings.delivery_eta_min,eta_max:settings.delivery_eta_max,total_units:totalUnits,is_large_order:totalUnits>=num(settings.large_order_item_threshold),created_at:new Date().toISOString(),items:demo.cart.map(x=>({...x})),events:[{status:'pending',actor_name:demo.profile.display_name||'Client',created_at:new Date().toISOString()}]};
+    demo.orders.unshift(o);storageSet(LS.orders,demo.orders);demo.cart=[];currentPromo=null;currentRewardId=null;updateCartCount();closeModal();toast(`Commande ${o.public_code} envoyée.`);nav('orders');
   }
 };
 
 
 function loyaltyLevel(points){
-  const reward=Math.max(1,num(settings.loyalty_reward_points));
-  if(points>=reward*3)return {name:'BLACK',icon:'crown'};
-  if(points>=reward*2)return {name:'OR',icon:'gem'};
-  if(points>=reward)return {name:'SABLE',icon:'sparkles'};
+  if(points>=300)return {name:'BLACK',icon:'crown'};
+  if(points>=150)return {name:'OR',icon:'gem'};
+  if(points>=50)return {name:'SABLE',icon:'sparkles'};
   return {name:'MEMBRE',icon:'badge'};
 }
 function renderLoyaltyCard(){
   const el=$('#loyaltyVisualCard');if(!el)return;
   if(!demo.profile||isStaff()){el.classList.add('hidden');return}
-  const pts=num(demo.profile.loyalty_points),reward=Math.max(1,num(settings.loyalty_reward_points));
-  const level=loyaltyLevel(pts),progress=Math.min(100,(pts%reward)/reward*100);
+  const pts=num(demo.profile.loyalty_points),rewards=(demo.loyaltyRewards||[]).filter(r=>r.active!==false).sort((a,b)=>num(a.points_required)-num(b.points_required));
+  const next=rewards.find(r=>num(r.points_required)>pts)||rewards[rewards.length-1]||null;
+  const target=next?Math.max(1,num(next.points_required)):100;
+  const level=loyaltyLevel(pts),progress=Math.min(100,pts/target*100);
+  const unlocked=rewards.filter(r=>pts>=num(r.points_required));
   el.classList.remove('hidden');
   el.innerHTML=`<div class="loyalty-card-top"><div><small>LTD SANDY SHORES</small><strong>CARTE FIDÉLITÉ</strong></div><i data-lucide="${level.icon}"></i></div>
     <div class="loyalty-card-name">${esc(demo.profile.display_name||'Client LTD')}</div>
     <div class="loyalty-card-bottom"><div><small>POINTS</small><strong>${pts}</strong></div><div><small>NIVEAU</small><strong>${level.name}</strong></div></div>
     <div class="loyalty-card-progress"><span style="width:${progress}%"></span></div>
-    <small class="loyalty-card-next">${pts>=reward?`Récompense disponible • ${reward} pts`:`${reward-pts} points avant votre prochaine récompense`}</small>`;
+    <small class="loyalty-card-next">${unlocked.length?`${unlocked.length} récompense${unlocked.length>1?'s':''} disponible${unlocked.length>1?'s':''}`:(next?`${Math.max(0,num(next.points_required)-pts)} points avant « ${esc(next.label)} »`:'Vos récompenses apparaîtront ici.')}</small>`;
   iconRefresh();
 }
 function orderEventTime(events,status){
@@ -1010,6 +1063,7 @@ async function renderOrders(){
     $('#ordersList').innerHTML=`<div class="empty"><strong>Aperçu client</strong><br><br>Un client connecté retrouvera ici ses commandes et leur suivi.</div>`;return;
   }
   if(!demo.profile){$('#loyaltyVisualCard')?.classList.add('hidden');$('#ordersList').innerHTML=`<div class="empty">Connectez-vous pour retrouver vos commandes.<br><br><button class="btn primary" onclick="showAuth('login')">Se connecter</button></div>`;return}
+  demo.loyaltyRewards=await getLoyaltyRewards();
   renderLoyaltyCard();
   let orders=[],events=[];
   if(hasSupabase){
@@ -1233,9 +1287,10 @@ window.saveProfile=async()=>{
   }catch(err){toast(err.message||'Impossible d’enregistrer le profil.');}
 };
 window.showLoyaltyHistory=async()=>{
-  let events=[];if(hasSupabase){const{data}=await sb.from('loyalty_events').select('*').eq('user_id',demo.profile.id).order('created_at',{ascending:false});events=data||[]}
-  else events=[];
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Fidélité</h3><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} points disponibles</strong><div>Une livraison est offerte tous les ${settings.loyalty_reward_points} points.</div></div>${events.length?events.map(e=>`<div class="total-line"><span>${esc(e.description||'Mouvement fidélité')}<br><small>${formatDate(e.created_at)}</small></span><strong>${num(e.points)>0?'+':''}${num(e.points)} pts</strong></div>`).join(''):'<div class="empty">L’historique apparaîtra ici après vos premières commandes livrées.</div>'}`);
+  let events=[];const rewards=await getLoyaltyRewards();
+  if(hasSupabase){const{data}=await sb.from('loyalty_events').select('*').eq('user_id',demo.profile.id).order('created_at',{ascending:false});events=data||[]}
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Fidélité</h3><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} points disponibles</strong><div>${rewards.length?`${rewards.length} récompense${rewards.length>1?'s':''} active${rewards.length>1?'s':''} actuellement.`:'Les récompenses seront bientôt disponibles.'}</div></div>${rewards.length?`<div class="loyalty-history-rewards">${rewards.map(r=>`<div class="mini-info"><span>${num(r.points_required)} points</span><strong>${esc(r.label)}</strong><small>${esc(rewardDescription(r))}</small></div>`).join('')}</div><div class="divider"></div>`:''}${events.length?events.map(e=>`<div class="total-line"><span>${esc(e.description||'Mouvement fidélité')}<br><small>${formatDate(e.created_at)}</small></span><strong>${num(e.points)>0?'+':''}${num(e.points)} pts</strong></div>`).join(''):'<div class="empty">L’historique apparaîtra ici après vos premières commandes livrées.</div>'}`);
+  iconRefresh();
 };
 window.logout=async()=>{if(hasSupabase)await sb.auth.signOut();demo.user=null;demo.profile=null;localStorage.removeItem(LS.profile);closeModal();await initAuth();toast('Déconnecté.');};
 window.enableNotifications=async()=>{if(!('Notification'in window))return toast('Notifications non disponibles sur cet appareil.');const p=await Notification.requestPermission();toast(p==='granted'?'Notifications activées.':'Autorisation non accordée.');};
