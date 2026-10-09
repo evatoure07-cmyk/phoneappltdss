@@ -30,7 +30,7 @@ const defaults = {
     loyalty_reward_points: Number(C.LOYALTY_REWARD_POINTS ?? 100), points_per_order: Number(C.POINTS_PER_COMPLETED_ORDER ?? 10),
     recruitment_day: C.RECRUITMENT_DAY || 'Dimanche', business_open: C.DEFAULT_OPEN !== false,
     hours_text: C.HOURS_TEXT || "Ouvert selon les disponibilités de l'équipe", pickup_enabled: true,
-    delivery_enabled: true, announcement_banner: ''
+    delivery_enabled: true, announcement_banner: '', order_delay_minutes: 1440, large_order_item_threshold: 100
   },
   products: [
     {id:'p1',name:'Eau purifiée',description:'Bouteille fraîche',price:0,category:'Boissons',emoji:'💧',active:true,available:true,stock:null,popular:true,is_new:false},
@@ -60,11 +60,14 @@ const demo = {
   orders: JSON.parse(localStorage.getItem(LS.orders) || '[]'),
   applications: JSON.parse(localStorage.getItem(LS.applications) || '[]'),
   partnerships: JSON.parse(localStorage.getItem(LS.partnerships) || '[]'),
-  packItems: JSON.parse(localStorage.getItem(LS.packItems) || '[]'), permissions: []
+  packItems: JSON.parse(localStorage.getItem(LS.packItems) || '[]'), permissions: [],
+  favoriteIds: new Set(), loyaltyRewards: [], staffNotifications: [], onDutyStatus: null
 };
 let settings = {...defaults.settings};
 let activeCategory = 'Tous';
 let currentPromo = null;
+let currentRewardId = null;
+let promoCountdownTimer = null;
 let currentOrderMode = 'delivery';
 let guestOrderDraft = null;
 let staffFilter = 'active';
@@ -300,9 +303,20 @@ async function getSettings(){
   return settings;
 }
 async function getProducts(includeInactive=false){
-  if(!hasSupabase) return includeInactive ? demo.products : demo.products.filter(p=>p.active!==false);
-  let q=sb.from('products').select('*').order('category').order('name'); if(!includeInactive)q=q.eq('active',true);
-  const {data,error}=await q; if(error){console.error(error);return []} return data||[];
+  const now=Date.now();
+  const timeVisible=p=>!p.available_from||new Date(p.available_from).getTime()<=now
+    ? (!p.available_until||new Date(p.available_until).getTime()>=now)
+    : false;
+  if(!hasSupabase){
+    const list=includeInactive?demo.products:demo.products.filter(p=>p.active!==false&&timeVisible(p));
+    return list;
+  }
+  let q=sb.from('products').select('*').order('category').order('name');
+  if(!includeInactive)q=q.eq('active',true);
+  const {data,error}=await q;
+  if(error){console.error(error);return []}
+  const list=data||[];
+  return includeInactive?list:list.filter(timeVisible);
 }
 async function getPopularProducts(limit=6){
   if(!hasSupabase){
@@ -320,6 +334,78 @@ async function getPopularProducts(limit=6){
   if(error){console.error(error);return []}
   return data||[];
 }
+async function getFavoriteIds(){
+  if(!demo.profile||isStaff())return new Set();
+  if(!hasSupabase)return demo.favoriteIds instanceof Set?demo.favoriteIds:new Set();
+  const {data,error}=await sb.from('product_favorites').select('product_id').eq('user_id',demo.profile.id);
+  if(error){console.error(error);return new Set()}
+  return new Set((data||[]).map(x=>String(x.product_id)));
+}
+async function getLoyaltyRewards(includeInactive=false){
+  if(!demo.profile||isStaff())return [];
+  if(!hasSupabase)return demo.loyaltyRewards||[];
+  let q=sb.from('loyalty_rewards').select('*').order('points_required').order('sort_order');
+  if(!includeInactive)q=q.eq('active',true);
+  const {data,error}=await q;
+  if(error){console.error(error);return []}
+  return data||[];
+}
+function rewardDescription(r){
+  if(!r)return '';
+  if(r.reward_type==='free_delivery')return 'Livraison offerte';
+  if(r.reward_type==='fixed_discount')return `${money(r.reward_value)} de réduction`;
+  if(r.reward_type==='percent_discount')return `${num(r.reward_value)} % de réduction`;
+  return r.label||'Récompense';
+}
+async function renderLiveService(){
+  const card=$('#liveServiceCard'),title=$('#liveServiceTitle'),textEl=$('#liveServiceText');
+  if(!card||!title||!textEl)return;
+  try{
+    const result=await invokeDiscordOrders({action:'on_duty'});
+    demo.onDutyStatus=result||null;
+    card.classList.toggle('active',Boolean(result?.active));
+    card.classList.toggle('unavailable',result?.available===false);
+    if(result?.available===false){
+      title.textContent='Statut en service indisponible';
+      textEl.textContent='Le LTD reste joignable selon ses horaires.';
+    }else if(result?.active){
+      title.textContent='Livraisons disponibles';
+      textEl.textContent=`${num(result.count)} employé${num(result.count)>1?'s':''} actuellement en service.`;
+    }else{
+      title.textContent='Aucun employé en service';
+      textEl.textContent='Les livraisons reprendront dès qu’un membre de l’équipe sera en service.';
+    }
+  }catch(err){
+    card.classList.add('unavailable');
+    title.textContent='Service en direct indisponible';
+    textEl.textContent='Réessayez un peu plus tard.';
+  }
+}
+function formatCountdown(ms){
+  const total=Math.max(0,Math.floor(ms/1000));
+  const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function startPromoCountdown(){
+  if(promoCountdownTimer){clearInterval(promoCountdownTimer);promoCountdownTimer=null}
+  const tick=()=>{
+    const nodes=$('[data-promo-end]');
+    if(!nodes.length){if(promoCountdownTimer)clearInterval(promoCountdownTimer);promoCountdownTimer=null;return}
+    const now=Date.now();
+    let expired=false;
+    nodes.forEach(node=>{
+      const left=new Date(node.dataset.promoEnd).getTime()-now;
+      const banner=node.closest('.premium-promo-banner,.promo-strip');
+      if(left<=0){expired=true;return}
+      node.textContent=`Se termine dans ${formatCountdown(left)}`;
+      banner?.classList.toggle('promo-urgent',left<=30*60*1000);
+    });
+    if(expired)renderPromoBanner();
+  };
+  tick();
+  promoCountdownTimer=setInterval(tick,1000);
+}
+
 async function getAnnouncements(includeInactive=false){
   if(!hasSupabase) return demo.announcements.filter(a=>includeInactive||a.active!==false).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   let q=sb.from('announcements').select('*').order('created_at',{ascending:false}); if(!includeInactive)q=q.eq('active',true);
@@ -445,11 +531,9 @@ async function renderPopularPodium(){
 
 async function renderHome(){
   await getSettings(); applySettingsToUI();
-  const [anns,contacts,products,popularRows]=await Promise.all([getAnnouncements(),getContacts(),getProducts(),getPopularProducts(3)]);
+  const [anns,contacts,products]=await Promise.all([getAnnouncements(),getContacts(),getProducts()]);
   demo.products=products;
-  renderPopularPodium(products,popularRows);
-  await renderPromoBanner();
-  await renderPopularPodium();
+  await Promise.all([renderPromoBanner(),renderPopularPodium(),renderLiveService()]);
   $('#homeAnnouncements').innerHTML=anns.slice(0,3).map(announcementHTML).join('')||'<div class="empty">Aucune nouveauté pour le moment.</div>';
   const packMonth=products.find(p=>p.is_pack && p.is_pack_of_month && p.available!==false);
   $('#homeMonthProducts').innerHTML=packMonth?homeProductHTML(packMonth):'<div class="empty wide-empty">Aucun pack du mois n’est sélectionné pour le moment.</div>';
@@ -461,6 +545,7 @@ async function renderHome(){
   document.body.classList.toggle('staff-mode',uiIsStaff());
   updateRoleNavigation();
   $('#staffHomeDashboard')?.classList.toggle('hidden',!uiIsStaff());
+  $('#staffNotificationButton')?.classList.toggle('hidden',!uiIsStaff());
   updatePreviewBanner();
   if(uiIsStaff()) await renderStaffHome();
   updateCartCount();
@@ -630,13 +715,15 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-phone]');i
 
 async function renderShop(){
   await getSettings();
-  const [all,promos,popularRows]=await Promise.all([getProducts(),getPromotions(),getPopularProducts(3)]);
+  const [all,promos,popularRows,favorites]=await Promise.all([getProducts(),getPromotions(),getPopularProducts(3),getFavoriteIds()]);
+  demo.favoriteIds=favorites;
   const popularMap=new Map(popularRows.map((row,index)=>[String(row.product_id),{rank:index+1,qty:num(row.sold_quantity)}]));
   demo.products=all.map(p=>{
     const pop=popularMap.get(String(p.id));
     return {...p,popular:Boolean(pop),popular_rank:pop?.rank||null,popular_quantity:pop?.qty||0};
   });
-  const cats=['Tous','Populaires','Nouveauté','Packs'];
+  const cats=['Tous',...(demo.profile&&!isStaff()?['Favoris']:[]),'Populaires','Nouveauté','Packs'];
+  if(activeCategory==='Favoris'&&(!demo.profile||isStaff()))activeCategory='Tous';
   $('#categoryChips').innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   renderShopProducts();
   await renderPromoBanner();
@@ -650,7 +737,7 @@ function renderShopProducts(){
   const list=(demo.products||[]).filter(p=>{
     if(p.available===false)return false;
     if(p.stock!==null&&p.stock!==undefined&&num(p.stock)<=0)return false;
-    const cat=activeCategory==='Tous'||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new)||(activeCategory==='Packs'&&p.is_pack);
+    const cat=activeCategory==='Tous'||(activeCategory==='Favoris'&&demo.favoriteIds?.has(String(p.id)))||(activeCategory==='Populaires'&&p.popular)||(activeCategory==='Nouveauté'&&p.is_new)||(activeCategory==='Packs'&&p.is_pack);
     if(!cat)return false;
     const text=normalize(`${p.name} ${p.description||''} ${p.category||''}`);
     return !nq||text.includes(nq);
@@ -660,17 +747,51 @@ function renderShopProducts(){
 }
 function productHTML(p){
   const available=p.available!==false && (p.stock===null||p.stock===undefined||num(p.stock)>0);
+  const favorite=Boolean(demo.favoriteIds?.has(String(p.id)));
+  const limited=Boolean(p.is_limited_edition);
+  const ends=p.available_until?new Date(p.available_until):null;
   const badge=p.is_product_of_month?'Produit du mois':(p.is_pack_of_month?'Pack du mois':(p.stock!==null&&p.stock!==undefined?`${num(p.stock)} dispo.`:(p.is_new?'Nouveau':p.popular?'Populaire':'')));
-  return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${p.popular?'auto-popular-product':''} ${available?'':'unavailable'}">${p.popular&&!p.is_pack?`<span class="popular-ribbon">POPULAIRE #${p.popular_rank}</span>`:''}${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}<div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div><h4>${esc(p.name)}</h4>${p.description?`<p class="product-description">${esc(p.description)}</p>`:'<p class="product-description empty-description">Aucune description.</p>'}<div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}<div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div><button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button></article>`;
+  return `<article class="product-card ${p.is_product_of_month?'product-of-month':''} ${p.is_pack?'pack-card':''} ${p.popular?'auto-popular-product':''} ${limited?'limited-product':''} ${available?'':'unavailable'}">
+    ${p.popular&&!p.is_pack?`<span class="popular-ribbon">POPULAIRE #${p.popular_rank}</span>`:''}
+    ${limited?`<span class="limited-ribbon">ÉDITION LIMITÉE</span>`:''}
+    ${demo.profile&&!isStaff()?`<button class="favorite-toggle ${favorite?'active':''}" data-favorite="${p.id}" title="${favorite?'Retirer des favoris':'Ajouter aux favoris'}"><i data-lucide="heart"></i></button>`:''}
+    ${p.is_product_of_month?'<span class="product-month-ribbon">PRODUIT DU MOIS</span>':''}${p.is_pack_of_month?'<span class="pack-month-ribbon">PACK DU MOIS</span>':''}
+    <div class="product-visual">${esc(p.emoji||'🛒')}${badge?`<span class="stock-badge">${esc(badge)}</span>`:''}</div>
+    <h4>${esc(p.name)}</h4>
+    ${p.description?`<p class="product-description">${esc(p.description)}</p>`:'<p class="product-description empty-description">Aucune description.</p>'}
+    ${limited&&ends?`<div class="limited-until"><i data-lucide="clock-3"></i> Jusqu’au ${ends.toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>`:''}
+    <div class="product-price"><strong>${money(p.price)}</strong><span class="subtle">${esc(p.category||'Divers')}</span></div>
+    ${p.is_pack?`<button class="pack-info-btn" data-packinfo="${p.id}"><i data-lucide="info"></i> Voir le contenu</button>`:''}
+    <div class="quick-add"><button class="qty-btn" data-qminus="${p.id}" ${available?'':'disabled'}>−</button><input class="qty-input" id="qty-${p.id}" type="number" min="1" max="999" value="1" inputmode="numeric" ${available?'':'disabled'}><button class="qty-btn" data-qplus="${p.id}" ${available?'':'disabled'}>+</button></div>
+    <button class="add-cart-wide" data-addqty="${p.id}" ${available?'':'disabled'}>${available?'Ajouter au panier':'Indisponible'}</button>
+  </article>`;
 }
 $('#productSearch')?.addEventListener('input',renderShopProducts);
 document.addEventListener('click',e=>{
+  const fav=e.target.closest('[data-favorite]');if(fav){e.preventDefault();e.stopPropagation();toggleFavorite(fav.dataset.favorite);return}
   const c=e.target.closest('[data-cat]');if(c){activeCategory=c.dataset.cat;renderShopProducts();$$('[data-cat]').forEach(x=>x.classList.toggle('active',x.dataset.cat===activeCategory));return}
   const m=e.target.closest('[data-qminus]');if(m){adjustCardQty(m.dataset.qminus,-1);return}
   const p=e.target.closest('[data-qplus]');if(p){adjustCardQty(p.dataset.qplus,1);return}
   const info=e.target.closest('[data-packinfo]');if(info){showPackInfo(info.dataset.packinfo);return}
   const a=e.target.closest('[data-addqty]');if(a){addToCart(a.dataset.addqty);return}
 });
+window.toggleFavorite=async id=>{
+  if(!demo.profile||isStaff())return toast('Connectez-vous avec un compte client pour utiliser les favoris.');
+  const key=String(id),exists=demo.favoriteIds?.has(key);
+  if(hasSupabase){
+    if(exists){
+      const {error}=await sb.from('product_favorites').delete().eq('user_id',demo.profile.id).eq('product_id',id);
+      if(error)return toast(error.message||'Impossible de modifier les favoris.');
+      demo.favoriteIds.delete(key);
+    }else{
+      const {error}=await sb.from('product_favorites').insert({user_id:demo.profile.id,product_id:id});
+      if(error)return toast(error.message||'Impossible de modifier les favoris.');
+      demo.favoriteIds.add(key);
+    }
+  }
+  renderShopProducts();
+  toast(exists?'Retiré des favoris.':'Ajouté aux favoris.');
+};
 function adjustCardQty(id,d){const input=byId(`qty-${id}`);if(!input)return;input.value=Math.max(1,Math.min(999,num(input.value)+d))}
 function addToCart(id){
   const p=demo.products.find(x=>String(x.id)===String(id));if(!p||p.available===false)return;
@@ -865,16 +986,22 @@ async function renderPromoBanner(){
   const promos=await getPromotions();
   const now=Date.now();
   const active=promos.find(p=>p.active!==false&&p.banner_enabled!==false&&(!p.starts_at||new Date(p.starts_at).getTime()<=now)&&(!p.ends_at||new Date(p.ends_at).getTime()>=now));
-  if(!active){home?.classList.add('hidden');shop?.classList.add('hidden');return}
+  if(!active){
+    home?.classList.add('hidden');shop?.classList.add('hidden');
+    if(promoCountdownTimer){clearInterval(promoCountdownTimer);promoCountdownTimer=null}
+    return;
+  }
   let product=null;
   if(active.product_id){
     const products=demo.products.length?demo.products:await getProducts();
     product=products.find(p=>String(p.id)===String(active.product_id));
   }
   const fallback=active.banner_text||`${active.name}${active.code?` • Code ${active.code}`:''}`;
-  const html=`<div class="promo-banner-icon">${product?esc(product.emoji||'🏷️'):'🏷️'}</div><div class="promo-banner-copy"><small>OFFRE DU MOMENT</small><strong>${esc(fallback)}</strong>${product?`<span>${esc(product.name)} • ${money(product.price)}</span>`:''}</div>${active.code?`<button onclick="navigator.clipboard?.writeText('${esc(active.code)}');toast('Code copié !')">COPIER ${esc(active.code)}</button>`:''}`;
+  const countdown=active.ends_at?`<span class="promo-countdown" data-promo-end="${esc(active.ends_at)}"></span>`:'';
+  const html=`<div class="promo-banner-icon">${product?esc(product.emoji||'🏷️'):'🏷️'}</div><div class="promo-banner-copy"><small>OFFRE FLASH</small><strong>${esc(fallback)}</strong>${product?`<span>${esc(product.name)} • ${money(product.price)}</span>`:''}${countdown}</div>${active.code?`<button onclick="navigator.clipboard?.writeText('${esc(active.code)}');toast('Code copié !')">COPIER ${esc(active.code)}</button>`:''}`;
   if(home){home.innerHTML=html;home.classList.remove('hidden')}
   if(shop){shop.innerHTML=html;shop.classList.remove('hidden')}
+  startPromoCountdown();
   iconRefresh();
 }
 
@@ -1058,7 +1185,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='8.14.1';
+window.LTD_BUILD='9.0.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
