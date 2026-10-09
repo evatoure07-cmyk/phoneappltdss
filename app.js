@@ -1171,6 +1171,47 @@ window.reorderOrder=async id=>{
   updateCartCount();if(!added)return toast('Les articles de cette commande ne sont plus disponibles.');nav('shop');setTimeout(showCart,80);toast('Ancienne commande ajoutée au panier.');
 };
 
+let staffOrderCache=[];
+let staffNotificationsCache=[];
+let staffRankingCache=[];
+const staffOrderMutations=new Set();
+
+function renderStaffOrdersFromCache(){
+  const target=$('#staffHomeOrders');if(!target)return;
+  const rows=(staffOrderCache||[]).filter(o=>!['delivered','cancelled'].includes(o.status));
+  target.innerHTML=rows.map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune commande à traiter.</div>';
+  iconRefresh();
+}
+function patchStaffOrderLocal(id,patch){
+  const i=staffOrderCache.findIndex(o=>String(o.id)===String(id));
+  if(i<0)return null;
+  const previous={...staffOrderCache[i]};
+  staffOrderCache[i]={...staffOrderCache[i],...patch};
+  renderStaffOrdersFromCache();
+  return previous;
+}
+function restoreStaffOrderLocal(id,previous){
+  if(!previous)return;
+  const i=staffOrderCache.findIndex(o=>String(o.id)===String(id));
+  if(i>=0)staffOrderCache[i]=previous;
+  else staffOrderCache.unshift(previous);
+  renderStaffOrdersFromCache();
+}
+function queueDiscordOrderSync(body){
+  if(!hasSupabase)return;
+  void invokeDiscordOrders(body);
+}
+async function refreshOneStaffOrder(id){
+  if(!hasSupabase)return;
+  const {data,error}=await sb.from('orders').select('*').eq('id',id).maybeSingle();
+  if(error||!data)return;
+  const i=staffOrderCache.findIndex(o=>String(o.id)===String(id));
+  if(['delivered','cancelled'].includes(data.status)){
+    if(i>=0)staffOrderCache.splice(i,1);
+  }else if(i>=0)staffOrderCache[i]={...staffOrderCache[i],...data};
+  else staffOrderCache.unshift(data);
+  renderStaffOrdersFromCache();
+}
 function staffActions(o){
   if(isPreviewMode()) return `<div class="order-actions"><button disabled>Aperçu uniquement</button><button onclick="showStaffOrder('${o.id}')">Détails</button></div>`;
   const mine=String(o.assigned_to||'')===String(demo.profile?.id||'');
@@ -1201,65 +1242,151 @@ async function renderStaffHome(){
   $('#staffAdminShortcut')?.classList.toggle('hidden',!uiCanManageAnything());
   $('#staffHomeOrdersWrap')?.classList.toggle('hidden',!uiCan('orders_view'));
 
-  let notifications=[],ranking=[],orders=[];
+  const orderPromise=uiCan('orders_view')
+    ? (hasSupabase
+        ? sb.from('orders').select('*').not('status','in','(delivered,cancelled)').order('created_at',{ascending:false}).limit(25)
+        : Promise.resolve({data:demo.orders.filter(o=>!['delivered','cancelled'].includes(o.status)),error:null}))
+    : Promise.resolve({data:[],error:null});
+
   if(!preview&&isStaff()){
-    [notifications,ranking]=await Promise.all([getStaffNotifications(50),getDeliveryRanking()]);
-    renderNotificationBadges(notifications);renderStaffDelayAlert(notifications);renderStaffRanking(ranking);
+    const [notifications,ranking,orderResult]=await Promise.all([
+      getStaffNotifications(50),
+      getDeliveryRanking(),
+      orderPromise
+    ]);
+    staffNotificationsCache=notifications||[];
+    staffRankingCache=ranking||[];
+    renderNotificationBadges(staffNotificationsCache);
+    renderStaffDelayAlert(staffNotificationsCache);
+    renderStaffRanking(staffRankingCache);
+    const delayedIds=new Set(staffNotificationsCache.filter(n=>n.type==='order_delay'&&n.order_id).map(n=>String(n.order_id)));
+    staffOrderCache=(orderResult?.data||[]).map(o=>({...o,_delayed:delayedIds.has(String(o.id))}));
   }else{
     renderNotificationBadges([]);renderStaffDelayAlert([]);renderStaffRanking([]);
+    const orderResult=await orderPromise;
+    staffOrderCache=orderResult?.data||[];
   }
 
-  if(uiCan('orders_view')){
-    if(hasSupabase){
-      const {data,error}=await sb.from('orders').select('*').not('status','in','(delivered,cancelled)').order('created_at',{ascending:false}).limit(25);
-      if(!error)orders=data||[];
-    }else orders=demo.orders.filter(o=>!['delivered','cancelled'].includes(o.status));
-    const delayedIds=new Set(notifications.filter(n=>n.type==='order_delay'&&n.order_id).map(n=>String(n.order_id)));
-    orders=orders.map(o=>({...o,_delayed:delayedIds.has(String(o.id))}));
-    $('#staffHomeOrders').innerHTML=orders.map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune commande à traiter.</div>';
-  }
+  if(uiCan('orders_view'))renderStaffOrdersFromCache();
   iconRefresh();
 }
 window.toggleBusinessStatus=async()=>{
   if(blockPreviewMutation())return;
   if(!isStaff())return showEmployeeAccess();
   if(!can('business_status_manage'))return toast('Votre rôle n’a pas l’autorisation de changer le statut.');
-  const next=!Boolean(settings.business_open);
+  const previous=Boolean(settings.business_open),next=!previous;
+  settings.business_open=next;
+  applySettingsToUI();
+  if($('#staffBusinessStatus'))$('#staffBusinessStatus').textContent=next?'Ouvert':'Fermé';
+  const btn=$('#staffBusinessToggle');
+  if(btn){btn.classList.toggle('closed',!next);btn.innerHTML=`<i data-lucide="power"></i><span>${next?'Fermer le LTD':'Ouvrir le LTD'}</span>`;iconRefresh();}
+  toast(next?'LTD ouvert.':'LTD fermé.');
   try{
     if(hasSupabase){const{error}=await sb.rpc('set_business_status',{p_open:next});if(error)throw error}
-    else{settings.business_open=next;storageSet(LS.settings,settings)}
-    settings.business_open=next;applySettingsToUI();await renderStaffHome();toast(next?'LTD ouvert.':'LTD fermé.');
-  }catch(err){toast(err.message||'Modification impossible.');}
+    else storageSet(LS.settings,settings);
+  }catch(err){
+    settings.business_open=previous;applySettingsToUI();
+    if($('#staffBusinessStatus'))$('#staffBusinessStatus').textContent=previous?'Ouvert':'Fermé';
+    toast(err.message||'Modification impossible.');
+  }
 };
 
 window.claimOrder=async id=>{
   if(blockPreviewMutation())return;
-  if(hasSupabase){const{error}=await sb.rpc('claim_order',{p_order_id:id});if(error)return toast(error.message||'Commande déjà prise.');}
-  else{const o=demo.orders.find(x=>String(x.id)===String(id));if(!o)return;if(o.assigned_to&&String(o.assigned_to)!==String(demo.profile.id))return toast('Cette commande est déjà prise.');o.assigned_to=demo.profile.id;o.assigned_name=demo.profile.display_name;o.assigned_at=new Date().toISOString();if(o.status==='pending')o.status='accepted';o.events=o.events||[];o.events.push({status:o.status,actor_name:demo.profile.display_name||'Employé',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}
-  if(hasSupabase)await invokeDiscordOrders({action:'claimed',order_id:id});
-  toast('Commande attribuée.');renderStaffHome();
+  id=String(id);
+  if(staffOrderMutations.has(id))return;
+  staffOrderMutations.add(id);
+  const previous=patchStaffOrderLocal(id,{
+    assigned_to:demo.profile?.id||null,
+    assigned_name:demo.profile?.display_name||'Employé',
+    assigned_at:new Date().toISOString(),
+    status:'accepted'
+  });
+  toast('Commande prise ✓');
+  try{
+    if(hasSupabase){
+      const {error}=await sb.rpc('claim_order',{p_order_id:id});
+      if(error)throw error;
+      queueDiscordOrderSync({action:'claimed',order_id:id});
+      void refreshOneStaffOrder(id);
+    }else{
+      const o=demo.orders.find(x=>String(x.id)===id);
+      if(!o)throw new Error('Commande introuvable.');
+      if(previous?.assigned_to&&String(previous.assigned_to)!==String(demo.profile.id))throw new Error('Cette commande est déjà prise.');
+      Object.assign(o,{assigned_to:demo.profile.id,assigned_name:demo.profile.display_name,assigned_at:new Date().toISOString(),status:'accepted'});
+      storageSet(LS.orders,demo.orders);
+    }
+  }catch(err){
+    restoreStaffOrderLocal(id,previous);
+    toast(err.message||'Commande déjà prise.');
+  }finally{
+    staffOrderMutations.delete(id);
+    renderStaffOrdersFromCache();
+  }
 };
+
 window.setOrderStatus=async(id,status)=>{
   if(blockPreviewMutation())return;
-  if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:status,p_reason:null});if(error)return toast(error.message||'Modification impossible.');}
-  else{
-    const o=demo.orders.find(x=>String(x.id)===String(id));if(!o)return;o.status=status;o.events=o.events||[];o.events.push({status,actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});
-    if(status==='delivered'&&!o.loyalty_awarded){o.loyalty_awarded=true;o.delivered_at=new Date().toISOString();const owner=demo.profile?.id===o.user_id;if(owner){demo.profile.loyalty_points=num(demo.profile.loyalty_points)+num(settings.points_per_order);storageSet(LS.profile,demo.profile)}}storageSet(LS.orders,demo.orders);
+  id=String(id);
+  if(staffOrderMutations.has(id))return;
+  staffOrderMutations.add(id);
+  const previous=patchStaffOrderLocal(id,{
+    status,
+    delivered_at:status==='delivered'?new Date().toISOString():undefined
+  });
+  toast(`Commande : ${statusLabel(status)} ✓`);
+  try{
+    if(hasSupabase){
+      const {error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:status,p_reason:null});
+      if(error)throw error;
+      queueDiscordOrderSync({action:'status',order_id:id});
+      if(status==='delivered'){
+        void getDeliveryRanking().then(rows=>{staffRankingCache=rows||[];renderStaffRanking(staffRankingCache);});
+      }
+      void refreshOneStaffOrder(id);
+    }else{
+      const o=demo.orders.find(x=>String(x.id)===id);if(!o)throw new Error('Commande introuvable.');
+      o.status=status;o.events=o.events||[];o.events.push({status,actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});
+      if(status==='delivered'&&!o.loyalty_awarded){o.loyalty_awarded=true;o.delivered_at=new Date().toISOString();}
+      storageSet(LS.orders,demo.orders);
+    }
+  }catch(err){
+    restoreStaffOrderLocal(id,previous);
+    toast(err.message||'Modification impossible.');
+  }finally{
+    staffOrderMutations.delete(id);
+    renderStaffOrdersFromCache();
   }
-  if(hasSupabase)await invokeDiscordOrders({action:'status',order_id:id});
-  toast(`Commande : ${statusLabel(status)}`);renderStaffHome();
 };
+
 window.cancelOrderPrompt=id=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Annuler la commande</h3><p class="page-intro">Un motif est obligatoire et sera conservé dans l’historique de la commande.</p><div class="form-group"><label>Motif</label><select id="cancelReasonPreset"><option value="">Choisir un motif…</option><option>Client absent / injoignable</option><option>Article indisponible</option><option>Zone inaccessible</option><option>Erreur dans la commande</option><option>Demande du client</option><option value="Autre">Autre</option></select></div><div class="form-group"><label>Précision (facultatif sauf “Autre”)</label><textarea id="cancelReasonDetail" placeholder="Ajoutez une précision si nécessaire…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Retour</button><button class="btn primary" onclick="confirmCancel('${id}')">Confirmer l’annulation</button></div>`);
 window.confirmCancel=async id=>{
   if(blockPreviewMutation())return;
+  id=String(id);
+  if(staffOrderMutations.has(id))return;
   const preset=($('#cancelReasonPreset')?.value||'').trim(),detail=($('#cancelReasonDetail')?.value||'').trim();
   if(!preset)return toast('Choisissez un motif d’annulation.');
   if(preset==='Autre'&&!detail)return toast('Précisez le motif.');
   const reason=detail?`${preset} — ${detail}`:preset;
-  if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});if(error)return toast(error.message)}
-  else{const o=demo.orders.find(x=>String(x.id)===String(id));if(o){o.status='cancelled';o.cancelled_reason=reason;o.events=o.events||[];o.events.push({status:'cancelled',actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}}
-  if(hasSupabase)await invokeDiscordOrders({action:'status',order_id:id});
-  closeModal();toast('Commande annulée.');renderStaffHome();
+  staffOrderMutations.add(id);
+  const previous=patchStaffOrderLocal(id,{status:'cancelled',cancelled_reason:reason});
+  closeModal();toast('Commande annulée ✓');
+  try{
+    if(hasSupabase){
+      const {error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});
+      if(error)throw error;
+      queueDiscordOrderSync({action:'status',order_id:id});
+    }else{
+      const o=demo.orders.find(x=>String(x.id)===id);if(!o)throw new Error('Commande introuvable.');
+      o.status='cancelled';o.cancelled_reason=reason;storageSet(LS.orders,demo.orders);
+    }
+  }catch(err){
+    restoreStaffOrderLocal(id,previous);
+    toast(err.message||'Annulation impossible.');
+  }finally{
+    staffOrderMutations.delete(id);
+    renderStaffOrdersFromCache();
+  }
 };
 window.showStaffOrder=async id=>{closeModal();showOrderDetail(id)};
 
