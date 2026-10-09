@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=8.14.1" />
+  <link rel="stylesheet" href="styles.css?v=9.0.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -21,6 +21,7 @@
       </button>
       <div class="top-actions">
         <button class="icon-btn" id="themeToggle" aria-label="Changer le thème" title="Passer en mode clair"><i data-lucide="sun"></i></button>
+        <button class="icon-btn staff-notification-btn hidden" id="staffNotificationButton" aria-label="Notifications internes" title="Notifications"><i data-lucide="bell"></i><b id="staffNotificationBadge" class="notification-badge hidden">0</b></button>
         <button class="icon-btn staff-access-btn" id="employeeAccessBtn" aria-label="Connexion employés" title="Connexion employés"><i data-lucide="badge-check"></i></button>
         <button class="status-dot-wrap" id="businessStatusButton" aria-label="Statut"><span class="status-dot"></span><span id="businessStatusMini">Ouvert</span></button>
         <button class="icon-btn" id="accountBtn" aria-label="Compte"><i data-lucide="user-round"></i></button>
@@ -38,6 +39,11 @@
           <button class="storefront-strip-link" data-nav="news">Voir les nouveautés</button>
         </div>
         <div id="homePromoBanner" class="promo-banner premium-promo-banner hidden client-home-section"></div>
+        <div id="liveServiceCard" class="live-service-card client-home-section">
+          <span class="live-service-dot"></span>
+          <div><small>SERVICE EN DIRECT</small><strong id="liveServiceTitle">Vérification du service…</strong><span id="liveServiceText">Connexion au statut Discord.</span></div>
+          <i data-lucide="radio"></i>
+        </div>
 
         <section id="staffHomeDashboard" class="staff-home-dashboard hidden">
           <div class="staff-home-welcome">
@@ -50,8 +56,14 @@
           </div>
           <div class="staff-home-actions">
             <button id="staffOrdersShortcut"><i data-lucide="package-check"></i><span>Commandes</span></button>
+            <button id="staffNotificationShortcut"><i data-lucide="bell-ring"></i><span>Notifications</span><b id="staffHomeNotificationBadge" class="staff-action-badge hidden">0</b></button>
             <button id="staffAdminShortcut"><i data-lucide="layout-dashboard"></i><span>Administration</span></button>
             <button id="staffAccountShortcut"><i data-lucide="circle-user-round"></i><span>Mon compte</span></button>
+          </div>
+          <div id="staffDelayAlert" class="staff-delay-alert hidden"></div>
+          <div class="staff-ranking-section">
+            <div class="section-heading sub"><div><span class="eyebrow">ÉQUIPE</span><h3>Classement des livreurs</h3></div></div>
+            <div id="staffDeliveryRanking" class="staff-ranking-list"></div>
           </div>
           <div id="staffHomeOrdersWrap" class="staff-home-orders">
             <div class="section-heading sub"><div><span class="eyebrow">COMMANDES</span><h3>À traiter</h3></div><button class="btn mini" id="staffHomeRefresh"><i data-lucide="refresh-cw"></i></button></div>
@@ -134,14 +146,6 @@
             <button class="editorial-link" data-nav="shop">Voir le catalogue <i data-lucide="arrow-right"></i></button>
           </div>
           <div id="popularPodium" class="popular-podium"></div>
-        </section>
-
-        <section class="editorial-section popular-podium-section client-home-section">
-          <div class="editorial-heading">
-            <div><span class="editorial-index">03</span><div><small>TOP VENTES</small><h3>Podium des produits</h3></div></div>
-            <button class="editorial-link" data-nav="shop">Catalogue <i data-lucide="arrow-right"></i></button>
-          </div>
-          <div id="homePopularPodium" class="popular-podium"></div>
         </section>
 
         <section class="home-service-rail client-home-section">
@@ -291,6 +295,7 @@
           <button class="admin-card" data-admin="productmonth" data-perm="catalog_manage"><i data-lucide="star"></i><span>Produit du mois</span></button>
           <button class="admin-card" data-admin="packs" data-perm="packs_manage"><i data-lucide="package-open"></i><span>Packs</span></button>
           <button class="admin-card" data-admin="promotion" data-perm="promotions_manage"><i data-lucide="badge-percent"></i><span>Promotions</span></button>
+          <button class="admin-card direction-only" data-admin="loyalty"><i data-lucide="gift"></i><span>Récompenses fidélité</span></button>
           <button class="admin-card" data-admin="recruitment" data-perm="recruitment_manage"><i data-lucide="badge-user"></i><span>Recrutement</span></button>
           <button class="admin-card" data-admin="contacts" data-perm="contacts_manage"><i data-lucide="contact-round"></i><span>Contacts</span></button>
           <button class="admin-card" data-admin="settings" data-perm="settings_manage"><i data-lucide="settings-2"></i><span>Paramètres</span></button>
@@ -330,6 +335,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=8.14.1"></script>
+  <script src="app.js?v=9.0.0"></script>
 </body>
 </html>
