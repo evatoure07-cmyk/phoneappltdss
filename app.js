@@ -296,6 +296,65 @@ async function getReviewStaff(){
   return data||[];
 }
 
+async function getStaffNotifications(limit=50){
+  if(!isStaff()||!hasSupabase)return [];
+  const {data,error}=await sb.rpc('get_staff_notifications',{p_limit:limit});
+  if(error){console.error(error);return []}
+  demo.staffNotifications=data||[];
+  return demo.staffNotifications;
+}
+async function getDeliveryRanking(){
+  if(!isStaff()||!hasSupabase)return [];
+  const {data,error}=await sb.rpc('get_delivery_ranking');
+  if(error){console.error(error);return []}
+  return data||[];
+}
+async function getMyStaffStats(){
+  if(!isStaff()||!hasSupabase)return null;
+  const {data,error}=await sb.rpc('get_my_staff_stats');
+  if(error){console.error(error);return null}
+  return Array.isArray(data)?data[0]||null:data||null;
+}
+function notificationIcon(type){
+  return ({new_order:'package-plus',large_order:'package-search',order_delay:'alarm-clock',review:'star',application:'badge-user',partnership:'handshake'})[type]||'bell';
+}
+function renderNotificationBadges(list=demo.staffNotifications||[]){
+  const unread=list.filter(n=>!n.is_read).length;
+  for(const id of ['#staffNotificationBadge','#staffHomeNotificationBadge']){
+    const el=$(id);if(!el)continue;el.textContent=unread>99?'99+':String(unread);el.classList.toggle('hidden',unread===0);
+  }
+}
+function renderStaffRanking(rows){
+  const el=$('#staffDeliveryRanking');if(!el)return;
+  const ranked=(rows||[]).filter(r=>num(r.delivered_orders)>0).slice(0,5);
+  if(!ranked.length){el.innerHTML='<div class="empty compact">Le classement apparaîtra après les premières livraisons.</div>';return}
+  el.innerHTML=ranked.map((r,i)=>{
+    const avatar=r.avatar_url?`<img src="${esc(r.avatar_url)}" alt="">`:esc((r.display_name||'?').slice(0,1).toUpperCase());
+    return `<article class="staff-ranking-card rank-${i+1}"><div class="staff-rank-number">${i+1}</div><div class="staff-rank-avatar">${avatar}</div><div class="staff-rank-copy"><strong>${esc(r.display_name)}</strong><span>${num(r.delivered_orders)} livraison${num(r.delivered_orders)>1?'s':''} • ⭐ ${num(r.avg_rating).toFixed(1)}/5</span><small>${num(r.satisfaction_rate)} % satisfaits</small></div></article>`;
+  }).join('');
+}
+function renderStaffDelayAlert(list){
+  const el=$('#staffDelayAlert');if(!el)return;
+  const delayed=(list||[]).filter(n=>n.type==='order_delay');
+  el.classList.toggle('hidden',!delayed.length);
+  if(!delayed.length){el.innerHTML='';return}
+  el.innerHTML=`<i data-lucide="alarm-clock"></i><div><strong>${delayed.length} commande${delayed.length>1?'s':''} en retard</strong><span>${delayed[0]?.body||'Une commande nécessite votre attention.'}</span></div><button onclick="showStaffNotificationCenter()">Voir</button>`;
+}
+window.showStaffNotificationCenter=async()=>{
+  if(!isStaff())return;
+  const list=await getStaffNotifications(50);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="notification-center-head"><div><span class="eyebrow">ESPACE INTERNE</span><h3>Centre de notifications</h3></div><button class="btn mini" onclick="markAllStaffNotificationsRead()">Tout marquer lu</button></div><div class="stack notification-center-list">${list.map(n=>`<article class="staff-notification-card ${esc(n.severity)} ${n.is_read?'read':'unread'}"><div class="notification-icon"><i data-lucide="${notificationIcon(n.type)}"></i></div><div><div class="notification-card-top"><strong>${esc(n.title)}</strong><span>${formatDate(n.created_at)}</span></div><p>${esc(n.body)}</p>${n.order_id?`<button class="notification-order-link" onclick="closeModal();showStaffOrder('${n.order_id}')">Ouvrir la commande</button>`:''}</div></article>`).join('')||'<div class="empty">Aucune notification importante.</div>'}</div>`);
+  iconRefresh();
+};
+window.markAllStaffNotificationsRead=async()=>{
+  if(!isStaff()||!hasSupabase)return;
+  const ids=(demo.staffNotifications||[]).filter(n=>!n.is_read).map(n=>n.id);
+  if(!ids.length)return toast('Tout est déjà lu.');
+  const {error}=await sb.rpc('mark_staff_notifications_read',{p_ids:ids});
+  if(error)return toast(error.message||'Impossible de marquer les notifications.');
+  demo.staffNotifications.forEach(n=>n.is_read=true);renderNotificationBadges();showStaffNotificationCenter();
+};
+
 async function getSettings(){
   if(!hasSupabase) return settings;
   const {data,error}=await sb.from('site_settings').select('*').eq('id','main').maybeSingle();
@@ -1080,8 +1139,9 @@ $('#refreshReviews')?.addEventListener('click',renderReviews);
 function statusLabel(s){return ({pending:'Commande reçue',accepted:'Confirmée',preparing:'En préparation',ready:'Prête',out_for_delivery:'Livreur en route',delivered:'Livrée',cancelled:'Annulée'})[s]||s}
 function orderProgress(status){const seq=['pending','accepted','preparing','out_for_delivery','delivered'];if(status==='ready')return 3;return Math.max(0,seq.indexOf(status))}
 function orderHTML(o,staff=false){
-  const items=o.order_items||o.items||[], progress=orderProgress(o.status),code=o.public_code||`SS-${String(o.id).slice(-5).toUpperCase()}`;
-  return `<article class="order-card"><div class="meta"><span class="order-code">#${esc(code)}</span><span>${formatDate(o.created_at)}</span></div><h4>${staff?`${esc(o.customer_name||'Client')} • `:''}${money(o.total)}</h4><p>${o.fulfillment==='pickup'?'Retrait au LTD':esc(o.delivery_address||'')}</p><div class="status-line"><span class="status ${esc(o.status)}">${statusLabel(o.status)}</span>${o.assigned_name?`<span class="subtle">Pris par ${esc(o.assigned_name)}</span>`:''}</div>${o.status!=='cancelled'?`<div class="timeline">${[0,1,2,3,4].map(i=>`<span class="timeline-step ${i<=progress?'done':''}"></span>`).join('')}</div>`:''}<div class="order-detail-grid"><div class="mini-info"><span>${o.fulfillment==='pickup'?'Retrait':'Estimation'}</span><strong>${o.fulfillment==='pickup'?'Dès que la commande est prête':`${o.eta_min||settings.delivery_eta_min}–${o.eta_max||settings.delivery_eta_max} min`}</strong></div><div class="mini-info"><span>Articles</span><strong>${items.reduce((a,x)=>a+num(x.quantity||x.qty),0)||'—'}</strong></div></div>${o.cancelled_reason?`<p style="margin-top:10px;color:#ffaaaa">Motif : ${esc(o.cancelled_reason)}</p>`:''}${staff?staffActions(o):`<div class="order-actions"><button onclick="showOrderDetail('${o.id}')">Voir le détail</button>${o.status==='delivered'?`<button class="primary-action" onclick="reorderOrder('${o.id}')">Recommander</button>`:''}</div>`}</article>`;
+  const items=o.order_items||o.items||[],progress=orderProgress(o.status),code=o.public_code||`SS-${String(o.id).slice(-5).toUpperCase()}`;
+  const ops=`${o.is_large_order?'<span class="operational-badge large"><i data-lucide="boxes"></i> GROSSE COMMANDE</span>':''}${o._delayed?'<span class="operational-badge delayed"><i data-lucide="alarm-clock"></i> EN RETARD</span>':''}`;
+  return `<article class="order-card ${o.is_large_order?'large-order-card':''} ${o._delayed?'delayed-order-card':''}"><div class="meta"><span class="order-code">#${esc(code)}</span><span>${formatDate(o.created_at)}</span></div>${ops?`<div class="operational-badges">${ops}</div>`:''}<h4>${staff?`${esc(o.customer_name||'Client')} • `:''}${money(o.total)}</h4><p>${o.fulfillment==='pickup'?'Retrait au LTD':esc(o.delivery_address||'')}</p><div class="status-line"><span class="status ${esc(o.status)}">${statusLabel(o.status)}</span>${o.assigned_name?`<span class="subtle">Pris par ${esc(o.assigned_name)}</span>`:''}</div>${o.status!=='cancelled'?`<div class="timeline">${[0,1,2,3,4].map(i=>`<span class="timeline-step ${i<=progress?'done':''}"></span>`).join('')}</div>`:''}<div class="order-detail-grid"><div class="mini-info"><span>${o.fulfillment==='pickup'?'Retrait':'Estimation'}</span><strong>${o.fulfillment==='pickup'?'Dès que la commande est prête':`${o.eta_min||settings.delivery_eta_min}–${o.eta_max||settings.delivery_eta_max} min`}</strong></div><div class="mini-info"><span>Articles</span><strong>${num(o.total_units)||items.reduce((a,x)=>a+num(x.quantity||x.qty),0)||'—'}</strong></div></div>${o.cancelled_reason?`<p style="margin-top:10px;color:#ffaaaa">Motif : ${esc(o.cancelled_reason)}</p>`:''}${staff?staffActions(o):`<div class="order-actions"><button onclick="showOrderDetail('${o.id}')">Voir le détail</button>${o.status==='delivered'?`<button class="primary-action" onclick="reorderOrder('${o.id}')">Recommander</button>`:''}</div>`}</article>`;
 }
 window.showOrderDetail=async id=>{
   let o,events=[];
@@ -1125,10 +1185,10 @@ function staffActions(o){
   return `<div class="order-actions">${next&&can('orders_manage')?`<button class="primary-action" onclick="setOrderStatus('${o.id}','${next}')">${next==='accepted'?'Confirmer':next==='preparing'?'Commencer la préparation':next==='ready'?'Marquer prête':next==='out_for_delivery'?'Départ livraison':'Terminer la commande'}</button>`:''}<button onclick="showStaffOrder('${o.id}')">Détails</button>${can('orders_manage')?`<button onclick="cancelOrderPrompt('${o.id}')">Annuler</button>`:''}</div>`;
 }
 async function renderStaffHome(){
-  if(!uiIsStaff() || !$('#staffHomeDashboard'))return;
+  if(!uiIsStaff()||!$('#staffHomeDashboard'))return;
   const preview=isPreviewMode();
   $('#staffHomeGreeting').textContent=preview?'Aperçu de l’espace employé':`Bonjour ${String(demo.profile?.display_name||'').split(' ')[0]||''}`.trim();
-  $('#staffHomeRole').textContent=roleLabel(uiDetailedRole()||demo.profile?.role||'employee') + (preview?' • aperçu':'');
+  $('#staffHomeRole').textContent=roleLabel(uiDetailedRole()||demo.profile?.role||'employee')+(preview?' • aperçu':'');
   const open=Boolean(settings.business_open);
   $('#staffBusinessStatus').textContent=open?'Ouvert':'Fermé';
   const toggle=$('#staffBusinessToggle');
@@ -1140,10 +1200,22 @@ async function renderStaffHome(){
   }
   $('#staffAdminShortcut')?.classList.toggle('hidden',!uiCanManageAnything());
   $('#staffHomeOrdersWrap')?.classList.toggle('hidden',!uiCan('orders_view'));
+
+  let notifications=[],ranking=[],orders=[];
+  if(!preview&&isStaff()){
+    [notifications,ranking]=await Promise.all([getStaffNotifications(50),getDeliveryRanking()]);
+    renderNotificationBadges(notifications);renderStaffDelayAlert(notifications);renderStaffRanking(ranking);
+  }else{
+    renderNotificationBadges([]);renderStaffDelayAlert([]);renderStaffRanking([]);
+  }
+
   if(uiCan('orders_view')){
-    let orders=[];
-    if(hasSupabase){const{data,error}=await sb.from('orders').select('*').not('status','in','(delivered,cancelled)').order('created_at',{ascending:false}).limit(25);if(!error)orders=data||[]}
-    else orders=demo.orders.filter(o=>!['delivered','cancelled'].includes(o.status));
+    if(hasSupabase){
+      const {data,error}=await sb.from('orders').select('*').not('status','in','(delivered,cancelled)').order('created_at',{ascending:false}).limit(25);
+      if(!error)orders=data||[];
+    }else orders=demo.orders.filter(o=>!['delivered','cancelled'].includes(o.status));
+    const delayedIds=new Set(notifications.filter(n=>n.type==='order_delay'&&n.order_id).map(n=>String(n.order_id)));
+    orders=orders.map(o=>({...o,_delayed:delayedIds.has(String(o.id))}));
     $('#staffHomeOrders').innerHTML=orders.map(o=>orderHTML(o,true)).join('')||'<div class="empty">Aucune commande à traiter.</div>';
   }
   iconRefresh();
@@ -1177,9 +1249,18 @@ window.setOrderStatus=async(id,status)=>{
   if(hasSupabase)await invokeDiscordOrders({action:'status',order_id:id});
   toast(`Commande : ${statusLabel(status)}`);renderStaffHome();
 };
-window.cancelOrderPrompt=id=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Annuler la commande</h3><div class="form-group"><label>Motif</label><textarea id="cancelReason" placeholder="Ex : article indisponible, zone inaccessible…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Retour</button><button class="btn primary" onclick="confirmCancel('${id}')">Confirmer</button></div>`);
+window.cancelOrderPrompt=id=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Annuler la commande</h3><p class="page-intro">Un motif est obligatoire et sera conservé dans l’historique de la commande.</p><div class="form-group"><label>Motif</label><select id="cancelReasonPreset"><option value="">Choisir un motif…</option><option>Client absent / injoignable</option><option>Article indisponible</option><option>Zone inaccessible</option><option>Erreur dans la commande</option><option>Demande du client</option><option value="Autre">Autre</option></select></div><div class="form-group"><label>Précision (facultatif sauf “Autre”)</label><textarea id="cancelReasonDetail" placeholder="Ajoutez une précision si nécessaire…"></textarea></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Retour</button><button class="btn primary" onclick="confirmCancel('${id}')">Confirmer l’annulation</button></div>`);
 window.confirmCancel=async id=>{
-  if(blockPreviewMutation())return;const reason=($('#cancelReason')?.value||'').trim();if(!reason)return toast('Indiquez un motif.');if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});if(error)return toast(error.message)}else{const o=demo.orders.find(x=>String(x.id)===String(id));if(o){o.status='cancelled';o.cancelled_reason=reason;o.events=o.events||[];o.events.push({status:'cancelled',actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}}if(hasSupabase)await invokeDiscordOrders({action:'status',order_id:id});closeModal();toast('Commande annulée.');renderStaffHome()};
+  if(blockPreviewMutation())return;
+  const preset=($('#cancelReasonPreset')?.value||'').trim(),detail=($('#cancelReasonDetail')?.value||'').trim();
+  if(!preset)return toast('Choisissez un motif d’annulation.');
+  if(preset==='Autre'&&!detail)return toast('Précisez le motif.');
+  const reason=detail?`${preset} — ${detail}`:preset;
+  if(hasSupabase){const{error}=await sb.rpc('set_order_status',{p_order_id:id,p_status:'cancelled',p_reason:reason});if(error)return toast(error.message)}
+  else{const o=demo.orders.find(x=>String(x.id)===String(id));if(o){o.status='cancelled';o.cancelled_reason=reason;o.events=o.events||[];o.events.push({status:'cancelled',actor_name:demo.profile?.display_name||'Équipe',created_at:new Date().toISOString()});storageSet(LS.orders,demo.orders)}}
+  if(hasSupabase)await invokeDiscordOrders({action:'status',order_id:id});
+  closeModal();toast('Commande annulée.');renderStaffHome();
+};
 window.showStaffOrder=async id=>{closeModal();showOrderDetail(id)};
 
 function showAuth(mode='login'){
@@ -1259,6 +1340,8 @@ $('#staffBusinessToggle')?.addEventListener('click',toggleBusinessStatus);
 $('#staffHomeRefresh')?.addEventListener('click',()=>renderStaffHome());
 $('#staffHomeProfileBtn')?.addEventListener('click',()=>editProfile());
 $('#staffAccountShortcut')?.addEventListener('click',()=>showAccount());
+$('#staffNotificationButton')?.addEventListener('click',()=>showStaffNotificationCenter());
+$('#staffNotificationShortcut')?.addEventListener('click',()=>showStaffNotificationCenter());
 $('#staffAdminShortcut')?.addEventListener('click',()=>canManageAnything()?nav('admin'):toast('Aucun accès administration.'));
 $('#staffOrdersShortcut')?.addEventListener('click',()=>{if(!can('orders_view'))return toast('Votre rôle n’a pas accès aux commandes.');document.getElementById('staffHomeOrdersWrap')?.scrollIntoView({behavior:'smooth'});});
 function satisfactionLabel(v){
@@ -1268,7 +1351,19 @@ function roleLabel(r){return STAFF_ROLES[r]||({customer:'Client',employee:'Emplo
 async function showAccount(){
   if(!demo.profile)return showAuth('login');
   const identity=isStaff()&&demo.profile.staff_username?`<span>@${esc(demo.profile.staff_username)}</span>`:(demo.profile?.client_username?`<span>@${esc(demo.profile.client_username)}</span>`:'');
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">${roleLabel(detailedRole()||demo.profile.role||'customer')}</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} / ${settings.loyalty_reward_points} points</strong><div>${num(demo.profile.loyalty_points)>=num(settings.loyalty_reward_points)?'Votre prochaine livraison peut être offerte.':`${Math.max(0,num(settings.loyalty_reward_points)-num(demo.profile.loyalty_points))} points avant une livraison offerte.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,num(demo.profile.loyalty_points)/Math.max(1,num(settings.loyalty_reward_points))*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button>${isStaff()?`<button class="btn ghost" onclick="enableNotifications()"><i data-lucide="bell-ring"></i> Activer les notifications</button>`:''}${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}${canUseRolePreview()?`<button class="btn ghost" type="button" data-ltd-action="role-preview"><i data-lucide="scan-eye"></i> Voir comme…</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  if(isStaff()){
+    const stats=await getMyStaffStats();
+    const avatar=demo.profile.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:esc((demo.profile.display_name||'E').slice(0,1).toUpperCase());
+    openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><section class="staff-profile-hero"><div class="staff-profile-avatar">${avatar}</div><div><span class="eyebrow">PROFIL EMPLOYÉ</span><h3>${esc(demo.profile.display_name||'Employé')}</h3>${identity}<span class="role-badge">${esc(roleLabel(detailedRole()||demo.profile.role||'employee'))}</span></div></section>
+      <div class="staff-profile-stats"><div><small>LIVRAISONS</small><strong>${num(stats?.delivered_orders)}</strong></div><div><small>NOTE</small><strong>⭐ ${num(stats?.avg_rating).toFixed(1)}</strong></div><div><small>SATISFACTION</small><strong>${num(stats?.satisfaction_rate)} %</strong></div><div><small>CLASSEMENT</small><strong>${num(stats?.ranking)?'#'+num(stats?.ranking):'—'}</strong></div></div>
+      ${demo.profile.profile_bio?`<div class="staff-profile-bio">${esc(demo.profile.profile_bio)}</div>`:''}
+      <div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Modifier mon profil</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showStaffNotificationCenter()"><i data-lucide="bell-ring"></i> Centre de notifications</button>${canManageAnything()?`<button class="btn primary" onclick="closeModal();nav('admin')"><i data-lucide="layout-dashboard"></i> Administration</button>`:''}${canUseRolePreview()?`<button class="btn ghost" type="button" data-ltd-action="role-preview"><i data-lucide="scan-eye"></i> Voir comme…</button>`:''}<button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+    iconRefresh();return;
+  }
+  demo.loyaltyRewards=await getLoyaltyRewards();
+  const next=(demo.loyaltyRewards||[]).find(r=>num(r.points_required)>num(demo.profile.loyalty_points));
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">Client</span></div></div><div class="loyalty-box"><strong>${num(demo.profile.loyalty_points)} points fidélité</strong><div>${next?`${Math.max(0,num(next.points_required)-num(demo.profile.loyalty_points))} points avant « ${esc(next.label)} »`:'Vous avez accès à vos récompenses fidélité.'}</div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button><button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  iconRefresh();
 }
 window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
 async function uploadAvatar(file){
