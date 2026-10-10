@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=9.0.1" />
+  <link rel="stylesheet" href="styles.css?v=9.1.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -286,6 +286,62 @@
         </div>
       </section>
 
+      <section class="view profile-view" id="profileView">
+        <div class="profile-page-head">
+          <button class="profile-back-btn" data-nav="home"><i data-lucide="arrow-left"></i><span>Retour</span></button>
+          <div><span class="eyebrow">MON COMPTE</span><h2>Mon profil</h2></div>
+          <button class="profile-save-top" id="profileSaveTop"><i data-lucide="save"></i><span>Enregistrer</span></button>
+        </div>
+
+        <section class="profile-hero-card">
+          <div class="profile-hero-pattern"></div>
+          <div class="profile-avatar-editor">
+            <div class="profile-page-avatar" id="profilePageAvatar"><span>?</span></div>
+            <div class="profile-avatar-actions">
+              <input id="profileAvatar" class="profile-file-input" type="file" accept="image/*">
+              <label class="profile-upload-btn" for="profileAvatar"><i data-lucide="image-plus"></i><span>Choisir une image</span></label>
+              <button class="profile-paste-btn" id="profilePasteAvatar" type="button"><i data-lucide="clipboard-paste"></i><span>Coller une image</span></button>
+            </div>
+          </div>
+          <div class="profile-hero-copy">
+            <span id="profilePageRole" class="profile-role-pill">Compte LTD</span>
+            <h3 id="profilePageName">Mon profil</h3>
+            <p id="profilePageIdentity">@identifiant</p>
+          </div>
+        </section>
+
+        <div class="profile-layout">
+          <section class="profile-panel profile-edit-panel">
+            <div class="profile-panel-title"><div><span class="eyebrow">INFORMATIONS</span><h3>Informations personnelles</h3></div><i data-lucide="user-round-pen"></i></div>
+            <div class="form-grid">
+              <div class="form-group"><label>Prénom & nom</label><input id="profileName" autocomplete="name"></div>
+              <div class="form-group"><label>Téléphone</label><input id="profilePhone" autocomplete="tel"></div>
+            </div>
+            <div class="form-group"><label>Adresse favorite</label><input id="profileAddress" placeholder="Lieu utilisé le plus souvent"></div>
+            <div id="profileStaffFields" class="profile-staff-fields hidden">
+              <div class="form-group"><label>Petite présentation</label><textarea id="profileBio" maxlength="160" placeholder="Ex : Responsable des ventes, livraisons et relation client"></textarea></div>
+              <label class="profile-switch-row"><input type="checkbox" id="profileShowPhone"><span><strong>Afficher mon numéro</strong><small>Visible dans l’espace contacts du LTD.</small></span></label>
+            </div>
+            <div class="profile-save-row">
+              <button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button>
+              <button class="btn primary" id="profileSaveButton"><i data-lucide="save"></i> Enregistrer les modifications</button>
+            </div>
+          </section>
+
+          <aside class="profile-side">
+            <section class="profile-panel">
+              <div class="profile-panel-title"><div><span class="eyebrow">APERÇU</span><h3>Mon activité</h3></div><i data-lucide="chart-no-axes-column-increasing"></i></div>
+              <div id="profileStatsGrid" class="profile-stats-grid"></div>
+            </section>
+            <section class="profile-panel profile-image-help" id="profilePasteZone" tabindex="0">
+              <div class="profile-panel-title"><div><span class="eyebrow">PHOTO</span><h3>Ajouter une photo</h3></div><i data-lucide="images"></i></div>
+              <p>Choisissez un fichier, utilisez le bouton <strong>Coller une image</strong>, ou copiez une image puis faites <strong>Ctrl+V / Cmd+V</strong> sur cette zone.</p>
+              <div id="profileImageStatus" class="profile-image-status">Aucune nouvelle image sélectionnée.</div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
       <section class="view" id="adminView">
         <div class="section-heading"><div><span class="eyebrow">GESTION LTD</span><h2>Administration</h2></div><button class="btn mini" id="refreshAdmin"><i data-lucide="refresh-cw"></i></button></div>
         <div id="adminStats" class="admin-stats"></div>
@@ -334,6 +390,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=9.0.1"></script>
+  <script src="app.js?v=9.1.0"></script>
 </body>
 </html>
