@@ -480,7 +480,7 @@ function nav(name){
   if(name==='partnerships'&&!isDirection())return toast('Les demandes de partenariat sont réservées à la direction.');
   $$('.view').forEach(v=>v.classList.remove('active'));const target=$(`#${name}View`);target?.classList.remove('active');void target?.offsetWidth;target?.classList.add('active');
   $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===name));
-  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='reviews')renderReviews();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
+  if(name==='home')renderHome();if(name==='shop')renderShop();if(name==='packs')renderPacks();if(name==='orders')renderOrders();if(name==='reviews')renderReviews();if(name==='news')renderNews();if(name==='recruitment')renderRecruitment();if(name==='contact')renderContact();if(name==='profile')renderProfilePage();if(name==='admin')renderAdmin();if(name==='employees')renderEmployeesList();if(name==='partnerships')renderPartnershipsPage();window.scrollTo({top:0,behavior:'smooth'});
 }
 window.nav=nav;
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n)nav(n.dataset.nav)});
@@ -1377,7 +1377,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='9.0.1';
+window.LTD_BUILD='9.1.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1418,25 +1418,184 @@ async function showAccount(){
     iconRefresh();return;
   }
   const pts=num(demo.profile.loyalty_points);
-  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">Client</span></div></div><div class="loyalty-box"><strong>${pts} points fidélité</strong><div>${pts>=50?'Vous pouvez utiliser 50 points pour rendre une livraison gratuite.':`${50-pts} points avant une livraison gratuite.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,pts/50*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button><button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
+  openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><div class="account-head"><div class="avatar">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:esc((demo.profile.display_name||'C').slice(0,1).toUpperCase())}</div><div class="account-meta"><strong>${esc(demo.profile.display_name||'Mon compte')}</strong>${identity}<span>${esc(demo.profile.phone||'Téléphone non renseigné')}</span><span class="role-badge">Client</span></div></div><div class="loyalty-box"><strong>${pts} points fidélité</strong><div>${pts>=50?'Vous pouvez utiliser 50 points pour rendre une livraison gratuite.':`${50-pts} points avant une livraison gratuite.`}</div><div class="loyalty-progress"><span style="width:${Math.min(100,pts/50*100)}%"></span></div></div><div class="account-actions"><button class="btn ghost" onclick="editProfile()"><i data-lucide="user-pen"></i> Mes informations</button><button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button><button class="btn ghost" onclick="showLoyaltyHistory()"><i data-lucide="history"></i> Historique fidélité</button><button class="btn ghost danger" onclick="logout()"><i data-lucide="log-out"></i> Se déconnecter</button></div>`);
   iconRefresh();
 }
-window.editProfile=()=>openModal(`<button class="icon-btn close" onclick="closeModal()">×</button><h3>Mes informations</h3>${isStaff()?`<div class="profile-photo-preview">${demo.profile?.avatar_url?`<img src="${esc(demo.profile.avatar_url)}" alt="">`:`${esc((demo.profile?.display_name||'E').slice(0,1).toUpperCase())}`}</div><div class="form-group"><label>Photo de profil</label><input id="profileAvatar" type="file" accept="image/*"></div>`:''}<div class="form-group"><label>Prénom & nom</label><input id="profileName" value="${esc(demo.profile?.display_name||'')}"></div><div class="form-group"><label>Téléphone</label><input id="profilePhone" value="${esc(demo.profile?.phone||'')}"></div>${isStaff()?`<div class="form-group"><label>Petite présentation</label><input id="profileBio" maxlength="120" value="${esc(demo.profile?.profile_bio||'')}" placeholder="Ex : Responsable des ventes"></div><label class="checkbox-row"><input type="checkbox" id="profileShowPhone" ${demo.profile?.show_phone?'checked':''}> Afficher mon numéro dans les contacts du LTD</label>`:''}<div class="form-group"><label>Adresse favorite</label><input id="profileAddress" value="${esc(demo.profile?.favorite_address||'')}" placeholder="Lieu utilisé le plus souvent"></div><div class="modal-actions"><button class="btn primary" onclick="saveProfile()">Enregistrer</button></div>`);
+let profileAvatarDraftFile=null;
+let profileAvatarPreviewUrl='';
+
+window.editProfile=()=>{
+  if(!demo.profile)return showAuth('login');
+  closeModal();
+  nav('profile');
+};
+
+function profileAvatarMarkup(){
+  const url=demo.profile?.avatar_url||'';
+  return url?`<img src="${esc(url)}" alt="">`:`<span>${esc((demo.profile?.display_name||'C').slice(0,1).toUpperCase())}</span>`;
+}
+function setProfileAvatarPreview(file){
+  if(!file||!String(file.type||'').startsWith('image/'))return toast('Choisissez une image valide.');
+  if(file.size>8*1024*1024)return toast('Image trop lourde : 8 Mo maximum.');
+  profileAvatarDraftFile=file;
+  if(profileAvatarPreviewUrl)URL.revokeObjectURL(profileAvatarPreviewUrl);
+  profileAvatarPreviewUrl=URL.createObjectURL(file);
+  const avatar=$('#profilePageAvatar');
+  if(avatar)avatar.innerHTML=`<img src="${profileAvatarPreviewUrl}" alt="Nouvelle photo">`;
+  const status=$('#profileImageStatus');
+  if(status)status.textContent=`${file.name||'Image collée'} • ${Math.max(1,Math.round(file.size/1024))} Ko • prête à être enregistrée`;
+}
+async function pasteProfileAvatarFromClipboard(){
+  if(!navigator.clipboard?.read){
+    $('#profilePasteZone')?.focus();
+    return toast('Copiez une image puis faites Ctrl+V / Cmd+V dans la zone photo.');
+  }
+  try{
+    const items=await navigator.clipboard.read();
+    for(const item of items){
+      const type=item.types.find(t=>t.startsWith('image/'));
+      if(!type)continue;
+      const blob=await item.getType(type);
+      const ext=(type.split('/')[1]||'png').replace('jpeg','jpg');
+      const file=new File([blob],`avatar-colle-${Date.now()}.${ext}`,{type});
+      setProfileAvatarPreview(file);
+      return;
+    }
+    toast('Aucune image trouvée dans le presse-papiers.');
+  }catch(err){
+    $('#profilePasteZone')?.focus();
+    toast('Autorisez le presse-papiers ou utilisez Ctrl+V / Cmd+V dans la zone photo.');
+  }
+}
+window.pasteProfileAvatarFromClipboard=pasteProfileAvatarFromClipboard;
+
 async function uploadAvatar(file){
   if(!file)return demo.profile?.avatar_url||'';
-  if(!hasSupabase){return await new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(file)})}
-  const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').toLowerCase();const path=`${demo.profile.id}/avatar-${Date.now()}.${ext}`;
-  const {error}=await sb.storage.from('staff-avatars').upload(path,file,{upsert:true,contentType:file.type||undefined});if(error)throw error;
+  if(!hasSupabase){
+    return await new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(file)});
+  }
+  const ext=(file.name?.split('.').pop()||file.type?.split('/').pop()||'jpg').replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const path=`${demo.profile.id}/avatar-${Date.now()}.${ext||'jpg'}`;
+  const {error}=await sb.storage.from('staff-avatars').upload(path,file,{upsert:true,contentType:file.type||undefined});
+  if(error)throw error;
   return sb.storage.from('staff-avatars').getPublicUrl(path).data.publicUrl;
 }
+
+async function renderProfilePage(){
+  if(!demo.profile)return showAuth('login');
+  if(hasSupabase)await getCurrentProfile();
+
+  const p=demo.profile||{};
+  const avatar=$('#profilePageAvatar');
+  if(avatar)avatar.innerHTML=profileAvatarDraftFile&&profileAvatarPreviewUrl
+    ?`<img src="${profileAvatarPreviewUrl}" alt="Nouvelle photo">`
+    :profileAvatarMarkup();
+
+  $('#profilePageName') && ($('#profilePageName').textContent=p.display_name||'Mon profil');
+  const identity=isStaff()?(p.staff_username?`@${p.staff_username}`:'Compte employé'):(p.client_username?`@${p.client_username}`:'Compte client');
+  $('#profilePageIdentity') && ($('#profilePageIdentity').textContent=identity);
+  $('#profilePageRole') && ($('#profilePageRole').textContent=roleLabel(detailedRole()||p.role||'customer'));
+  $('#profileName') && ($('#profileName').value=p.display_name||'');
+  $('#profilePhone') && ($('#profilePhone').value=p.phone||'');
+  $('#profileAddress') && ($('#profileAddress').value=p.favorite_address||'');
+
+  const staff=isStaff();
+  $('#profileStaffFields')?.classList.toggle('hidden',!staff);
+  if(staff){
+    $('#profileBio') && ($('#profileBio').value=p.profile_bio||'');
+    $('#profileShowPhone') && ($('#profileShowPhone').checked=Boolean(p.show_phone));
+  }
+
+  const stats=$('#profileStatsGrid');
+  if(stats){
+    if(staff){
+      const s=await getMyStaffStats();
+      stats.innerHTML=`
+        <div class="profile-stat-card"><span>Livraisons</span><strong>${num(s?.delivered_orders)}</strong><small>terminées</small></div>
+        <div class="profile-stat-card"><span>Note moyenne</span><strong>★ ${num(s?.avg_rating).toFixed(1)}</strong><small>sur 5</small></div>
+        <div class="profile-stat-card"><span>Satisfaction</span><strong>${num(s?.satisfaction_rate)} %</strong><small>clients satisfaits</small></div>
+        <div class="profile-stat-card"><span>Classement</span><strong>${num(s?.ranking)>0?`#${num(s.ranking)}`:'—'}</strong><small>livreurs LTD</small></div>`;
+    }else{
+      let delivered=[],favoriteIds=new Set();
+      if(hasSupabase){
+        const [or,favs]=await Promise.all([
+          sb.from('orders').select('id,total,status').eq('user_id',p.id).eq('status','delivered'),
+          getFavoriteIds()
+        ]);
+        delivered=or.data||[];favoriteIds=favs||new Set();
+      }
+      const spent=delivered.reduce((a,o)=>a+num(o.total),0);
+      stats.innerHTML=`
+        <div class="profile-stat-card"><span>Points</span><strong>${num(p.loyalty_points)}</strong><small>50 pts = livraison offerte</small></div>
+        <div class="profile-stat-card"><span>Commandes</span><strong>${delivered.length}</strong><small>livrées</small></div>
+        <div class="profile-stat-card"><span>Favoris</span><strong>${favoriteIds.size}</strong><small>produits enregistrés</small></div>
+        <div class="profile-stat-card"><span>Total livré</span><strong>${money(spent)}</strong><small>commandes terminées</small></div>`;
+    }
+  }
+  iconRefresh();
+}
+window.renderProfilePage=renderProfilePage;
+
 window.saveProfile=async()=>{
+  if(!demo.profile)return showAuth('login');
+  const saveButtons=['#profileSaveButton','#profileSaveTop'].map(s=>$(s)).filter(Boolean);
+  saveButtons.forEach(b=>b.disabled=true);
   try{
-    const file=$('#profileAvatar')?.files?.[0]||null;const avatar=isStaff()?await uploadAvatar(file):(demo.profile?.avatar_url||'');
-    const x={display_name:$('#profileName').value.trim(),phone:$('#profilePhone').value.trim(),favorite_address:$('#profileAddress').value.trim()};
-    if(isStaff()){x.profile_bio=($('#profileBio')?.value||'').trim();x.show_phone=Boolean($('#profileShowPhone')?.checked);x.avatar_url=avatar}
-    if(hasSupabase){const{error}=await sb.from('profiles').update(x).eq('id',demo.profile.id);if(error)throw error;await getCurrentProfile()}else{Object.assign(demo.profile,x);storageSet(LS.profile,demo.profile)}closeModal();renderContact();toast('Informations enregistrées.');
-  }catch(err){toast(err.message||'Impossible d’enregistrer le profil.');}
+    const avatar=profileAvatarDraftFile?await uploadAvatar(profileAvatarDraftFile):(demo.profile?.avatar_url||'');
+    const x={
+      display_name:($('#profileName')?.value||'').trim(),
+      phone:($('#profilePhone')?.value||'').trim(),
+      favorite_address:($('#profileAddress')?.value||'').trim(),
+      avatar_url:avatar
+    };
+    if(!x.display_name)throw new Error('Le nom est obligatoire.');
+    if(isStaff()){
+      x.profile_bio=($('#profileBio')?.value||'').trim();
+      x.show_phone=Boolean($('#profileShowPhone')?.checked);
+    }
+    if(hasSupabase){
+      const {error}=await sb.from('profiles').update(x).eq('id',demo.profile.id);
+      if(error)throw error;
+      await getCurrentProfile();
+    }else{
+      Object.assign(demo.profile,x);storageSet(LS.profile,demo.profile);
+    }
+    profileAvatarDraftFile=null;
+    if(profileAvatarPreviewUrl){URL.revokeObjectURL(profileAvatarPreviewUrl);profileAvatarPreviewUrl=''}
+    const status=$('#profileImageStatus');if(status)status.textContent='Profil enregistré.';
+    await renderProfilePage();
+    if(isStaff())renderContact();
+    toast('Profil enregistré.');
+  }catch(err){
+    toast(err.message||'Impossible d’enregistrer le profil.');
+  }finally{
+    saveButtons.forEach(b=>b.disabled=false);
+  }
 };
+
+$('#profileAvatar')?.addEventListener('change',e=>{
+  const file=e.target.files?.[0];if(file)setProfileAvatarPreview(file);
+});
+$('#profilePasteAvatar')?.addEventListener('click',pasteProfileAvatarFromClipboard);
+$('#profileSaveButton')?.addEventListener('click',saveProfile);
+$('#profileSaveTop')?.addEventListener('click',saveProfile);
+$('#profilePasteZone')?.addEventListener('paste',e=>{
+  const items=[...(e.clipboardData?.items||[])];
+  const item=items.find(x=>String(x.type||'').startsWith('image/'));
+  if(!item)return;
+  const file=item.getAsFile();
+  if(file){e.preventDefault();setProfileAvatarPreview(file);}
+});
+document.addEventListener('paste',e=>{
+  if(!$('#profileView')?.classList.contains('active'))return;
+  if(e.target?.matches?.('input,textarea'))return;
+  const items=[...(e.clipboardData?.items||[])];
+  const item=items.find(x=>String(x.type||'').startsWith('image/'));
+  if(!item)return;
+  const file=item.getAsFile();
+  if(file){e.preventDefault();setProfileAvatarPreview(file);}
+});
+
 window.showLoyaltyHistory=async()=>{
   let events=[];
   if(hasSupabase){const{data}=await sb.from('loyalty_events').select('*').eq('user_id',demo.profile.id).order('created_at',{ascending:false});events=data||[]}
