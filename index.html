@@ -289,52 +289,59 @@
       <section class="view profile-view" id="profileView">
         <div class="profile-page-head">
           <button class="profile-back-btn" data-nav="home"><i data-lucide="arrow-left"></i><span>Retour</span></button>
-          <div><span class="eyebrow">MON COMPTE</span><h2>Mon profil</h2></div>
+          <div class="profile-page-heading"><span class="eyebrow">MON COMPTE</span><h2>Mon profil</h2></div>
           <button class="profile-save-top" id="profileSaveTop"><i data-lucide="save"></i><span>Enregistrer</span></button>
         </div>
 
-        <section class="profile-hero-card">
+        <section class="profile-hero-card" id="profilePasteZone" tabindex="0">
           <div class="profile-hero-pattern"></div>
+
           <div class="profile-avatar-editor">
             <div class="profile-page-avatar" id="profilePageAvatar"><span>?</span></div>
-            <div class="profile-avatar-actions">
-              <input id="profileAvatar" class="profile-file-input" type="file" accept="image/*">
-              <label class="profile-upload-btn" for="profileAvatar"><i data-lucide="image-plus"></i><span>Choisir une image</span></label>
-              <button class="profile-paste-btn" id="profilePasteAvatar" type="button"><i data-lucide="clipboard-paste"></i><span>Coller une image</span></button>
-            </div>
           </div>
+
           <div class="profile-hero-copy">
             <span id="profilePageRole" class="profile-role-pill">Compte LTD</span>
             <h3 id="profilePageName">Mon profil</h3>
             <p id="profilePageIdentity">@identifiant</p>
           </div>
+
+          <div class="profile-avatar-actions">
+            <input id="profileAvatar" class="profile-file-input" type="file" accept="image/*">
+            <label class="profile-upload-btn" for="profileAvatar"><i data-lucide="image-plus"></i><span>Choisir une image</span></label>
+            <button class="profile-paste-btn" id="profilePasteAvatar" type="button"><i data-lucide="clipboard-paste"></i><span>Coller une image</span></button>
+            <div id="profileImageStatus" class="profile-image-status">Aucune nouvelle image sélectionnée.</div>
+          </div>
         </section>
 
         <div class="profile-layout">
           <section class="profile-panel profile-edit-panel">
-            <div class="profile-panel-title"><div><span class="eyebrow">INFORMATIONS</span><h3>Informations personnelles</h3></div><i data-lucide="user-round-pen"></i></div>
-            <div class="form-grid">
-              <div class="form-group"><label>Prénom & nom</label><input id="profileName" autocomplete="name"></div>
-              <div class="form-group"><label>Téléphone</label><input id="profilePhone" autocomplete="tel"></div>
-            </div>
-            <div class="form-group"><label>Adresse favorite</label><input id="profileAddress" placeholder="Lieu utilisé le plus souvent"></div>
-            <div id="profileStaffFields" class="profile-staff-fields hidden">
-              <div class="form-group"><label>Petite présentation</label><textarea id="profileBio" maxlength="160" placeholder="Ex : Responsable des ventes, livraisons et relation client"></textarea></div>
-              <label class="profile-switch-row"><input type="checkbox" id="profileShowPhone"><span><strong>Afficher mon numéro</strong><small>Visible dans l’espace contacts du LTD.</small></span></label>
+            <div class="profile-panel-title">
+              <div><span class="eyebrow">INFORMATIONS</span><h3>Informations personnelles</h3></div>
+              <i data-lucide="user-round-pen"></i>
             </div>
 
+            <div class="profile-form-grid">
+              <div class="form-group"><label>Prénom & nom</label><input id="profileName" autocomplete="name"></div>
+              <div class="form-group"><label>Téléphone</label><input id="profilePhone" autocomplete="tel"></div>
+              <div class="form-group profile-field-wide"><label>Adresse favorite</label><input id="profileAddress" placeholder="Lieu utilisé le plus souvent"></div>
+              <div id="profileStaffFields" class="profile-staff-fields profile-field-wide hidden">
+                <div class="form-group"><label>Petite présentation</label><textarea id="profileBio" maxlength="160" placeholder="Ex : Responsable des ventes, livraisons et relation client"></textarea></div>
+                <label class="profile-switch-row">
+                  <input type="checkbox" id="profileShowPhone">
+                  <span><strong>Afficher mon numéro</strong><small>Visible dans l’espace contacts du LTD.</small></span>
+                </label>
+              </div>
+            </div>
           </section>
 
           <aside class="profile-side">
-            <section class="profile-panel">
-              <div class="profile-panel-title"><div><span class="eyebrow">APERÇU</span><h3>Mon activité</h3></div><i data-lucide="chart-no-axes-column-increasing"></i></div>
+            <section class="profile-panel profile-activity-panel">
+              <div class="profile-panel-title">
+                <div><span class="eyebrow">APERÇU</span><h3>Mon activité</h3></div>
+                <i data-lucide="chart-no-axes-column-increasing"></i>
+              </div>
               <div id="profileStatsGrid" class="profile-stats-grid"></div>
-            </section>
-            <section class="profile-panel profile-image-help" id="profilePasteZone" tabindex="0">
-              <div class="profile-panel-title"><div><span class="eyebrow">PHOTO</span><h3>Ajouter une photo</h3></div><i data-lucide="images"></i></div>
-              <p>Choisissez une image, collez-la depuis votre presse-papiers ou glissez-déposez-la directement ici.</p>
-              <div class="profile-drop-hint"><i data-lucide="upload-cloud"></i><span>Déposer une image ici</span></div>
-              <div id="profileImageStatus" class="profile-image-status">Aucune nouvelle image sélectionnée.</div>
             </section>
           </aside>
         </div>
@@ -393,6 +400,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=9.1.0"></script>
+  <script src="app.js?v=9.2.0"></script>
 </body>
 </html>
