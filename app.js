@@ -196,6 +196,23 @@ async function invokeDiscordOrders(body){
     return null;
   }
 }
+async function invokeDiscordOrdersRequired(body){
+  if(!hasSupabase)throw new Error('La base centrale Supabase n’est pas configurée.');
+  const {data,error}=await sb.functions.invoke('discord-orders',{body});
+  if(error){
+    let detail='';
+    try{
+      if(error?.context && typeof error.context.json==='function'){
+        const payload=await error.context.clone().json();
+        detail=payload?.error||payload?.message||'';
+      }
+    }catch{}
+    throw new Error(detail||error?.message||'Action Discord impossible.');
+  }
+  if(data?.error)throw new Error(data.error);
+  return data;
+}
+
 
 
 function requireCentralDatabase(action='cette action'){
@@ -405,17 +422,22 @@ async function renderLiveService(){
   try{
     const result=await invokeDiscordOrders({action:'on_duty'});
     demo.onDutyStatus=result||null;
-    card.classList.toggle('active',Boolean(result?.active));
-    card.classList.toggle('unavailable',result?.available===false);
+    const count=num(result?.count);
+    const canOpen=Boolean(result?.can_open ?? (count>=2));
+    card.classList.toggle('active',canOpen);
+    card.classList.toggle('unavailable',result?.available===false||!canOpen);
     if(result?.available===false){
       title.textContent='Statut en service indisponible';
-      textEl.textContent='Le LTD reste joignable selon ses horaires.';
-    }else if(result?.active){
-      title.textContent='Livraisons disponibles';
-      textEl.textContent=`${num(result.count)} employé${num(result.count)>1?'s':''} actuellement en service.`;
+      textEl.textContent='Impossible de vérifier le rôle Discord « En service ».';
+    }else if(canOpen){
+      title.textContent='Équipe de livraison disponible';
+      textEl.textContent=`${count} employé${count>1?'s':''} en service • ouverture des livraisons autorisée.`;
+    }else if(count===1){
+      title.textContent='Équipe incomplète';
+      textEl.textContent='1/2 employé en service • pas assez de membres pour ouvrir les livraisons.';
     }else{
-      title.textContent='Aucun employé en service';
-      textEl.textContent='Les livraisons reprendront dès qu’un membre de l’équipe sera en service.';
+      title.textContent='Livraisons indisponibles';
+      textEl.textContent='0/2 employé en service • il faut au moins deux membres en service.';
     }
   }catch(err){
     card.classList.add('unavailable');
@@ -1164,10 +1186,15 @@ async function renderStaffHome(){
   $('#staffBusinessStatus').textContent=open?'Ouvert':'Fermé';
   const toggle=$('#staffBusinessToggle');
   if(toggle){
+    const dutyCount=num(demo.onDutyStatus?.count);
     toggle.classList.toggle('closed',!open);
     toggle.disabled=preview||!uiCan('business_status_manage');
-    toggle.innerHTML=`<i data-lucide="power"></i><span>${open?'Fermer le LTD':'Ouvrir le LTD'}</span>`;
-    toggle.title=preview?'Mode aperçu : modification désactivée':(uiCan('business_status_manage')?'Changer le statut du LTD':'Ce rôle n’a pas cette permission');
+    toggle.innerHTML=`<i data-lucide="power"></i><span>${open?'Fermer le LTD':`Ouvrir le LTD • ${dutyCount}/2`}</span>`;
+    toggle.title=preview
+      ?'Mode aperçu : modification désactivée'
+      :(uiCan('business_status_manage')
+        ?(open?'Fermer le système de livraison':`Ouverture autorisée à partir de 2 employés en service • actuellement ${dutyCount}/2`)
+        :'Ce rôle n’a pas cette permission');
   }
   $('#staffAdminShortcut')?.classList.toggle('hidden',!uiCanManageAnything());
   $('#staffHomeOrdersWrap')?.classList.toggle('hidden',!uiCan('orders_view'));
@@ -1205,19 +1232,36 @@ window.toggleBusinessStatus=async()=>{
   if(!isStaff())return showEmployeeAccess();
   if(!can('business_status_manage'))return toast('Votre rôle n’a pas l’autorisation de changer le statut.');
   const previous=Boolean(settings.business_open),next=!previous;
-  settings.business_open=next;
-  applySettingsToUI();
-  if($('#staffBusinessStatus'))$('#staffBusinessStatus').textContent=next?'Ouvert':'Fermé';
   const btn=$('#staffBusinessToggle');
-  if(btn){btn.classList.toggle('closed',!next);btn.innerHTML=`<i data-lucide="power"></i><span>${next?'Fermer le LTD':'Ouvrir le LTD'}</span>`;iconRefresh();}
-  toast(next?'LTD ouvert.':'LTD fermé.');
+
+  if(btn)btn.disabled=true;
+  if(next)toast('Vérification des membres en service…');
+
   try{
-    if(hasSupabase){const{error}=await sb.rpc('set_business_status',{p_open:next});if(error)throw error}
-    else storageSet(LS.settings,settings);
+    if(hasSupabase){
+      const result=await invokeDiscordOrdersRequired({action:'set_business_status',open:next});
+      settings.business_open=Boolean(result?.business_open);
+      demo.onDutyStatus={...(demo.onDutyStatus||{}),count:num(result?.on_duty_count),required_count:2,can_open:num(result?.on_duty_count)>=2,available:true};
+    }else{
+      if(next)throw new Error('Impossible de vérifier les membres en service sans Discord.');
+      settings.business_open=false;
+      storageSet(LS.settings,settings);
+    }
+
+    applySettingsToUI();
+    if($('#staffBusinessStatus'))$('#staffBusinessStatus').textContent=settings.business_open?'Ouvert':'Fermé';
+    toast(settings.business_open
+      ?`Livraisons ouvertes • ${num(demo.onDutyStatus?.count)}/2 membres en service.`
+      :'Système de livraison fermé.');
+    await renderLiveService();
   }catch(err){
-    settings.business_open=previous;applySettingsToUI();
+    settings.business_open=previous;
+    applySettingsToUI();
     if($('#staffBusinessStatus'))$('#staffBusinessStatus').textContent=previous?'Ouvert':'Fermé';
-    toast(err.message||'Modification impossible.');
+    toast(err?.message||'Modification impossible.');
+  }finally{
+    if(btn)btn.disabled=false;
+    await renderStaffHome();
   }
 };
 
@@ -1377,7 +1421,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='9.2.0';
+window.LTD_BUILD='9.1.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
