@@ -71,6 +71,9 @@ let currentOrderMode = 'delivery';
 let guestOrderDraft = null;
 let staffFilter = 'active';
 let realtimeChannel = null;
+let businessStatusChannel = null;
+let businessStatusPollTimer = null;
+let businessStatusSyncBound = false;
 let modalLocked = false;
 let passwordPromptedFor = null;
 let adminHistoryOrders=[];
@@ -554,6 +557,7 @@ function applySettingsToUI(){
   const open=Boolean(settings.business_open);
   $('#businessStatusMini') && ($('#businessStatusMini').textContent=open?'Ouvert':'Fermé');
   $('.status-dot')?.classList.toggle('closed',!open);
+  $('#businessStatusButton')?.classList.toggle('closed',!open);
   if($('#heroStatus')){ $('#heroStatus').textContent=open?'OUVERT':'FERMÉ'; $('#heroStatus').classList.toggle('closed',!open); }
   $('#homeDeliveryFee') && ($('#homeDeliveryFee').textContent=money(settings.delivery_fee));
   $('#homeEta') && ($('#homeEta').textContent=`${settings.delivery_eta_min}–${settings.delivery_eta_max} min`);
@@ -563,6 +567,11 @@ function applySettingsToUI(){
   $('#contactBusinessHours') && ($('#contactBusinessHours').textContent=settings.hours_text);
   $('#recruitDayNews') && ($('#recruitDayNews').textContent=String(settings.recruitment_day).toLowerCase());
   $('#shopClosedBanner')?.classList.toggle('hidden',open);
+  const checkout=$('#checkoutBtn');
+  if(checkout){
+    checkout.disabled=!open;
+    checkout.textContent=open?'Valider la commande':'Commandes fermées';
+  }
 }
 
 async function renderPopularPodium(){
@@ -1417,7 +1426,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='9.2.1';
+window.LTD_BUILD='9.0.2';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -2226,8 +2235,7 @@ let realtimeRefreshTimer=null;
 function scheduleRealtimeRefresh(table){
   clearTimeout(realtimeRefreshTimer);
   realtimeRefreshTimer=setTimeout(async()=>{
-    if(['site_settings','products','announcements','contacts','jobs','profiles'].includes(table)) await renderHome();
-    if(table==='site_settings'){await getSettings();applySettingsToUI();if(uiIsStaff())await renderStaffHome();}
+    if(['products','announcements','contacts','jobs','profiles'].includes(table)) await renderHome();
     if(table==='products'&&$('#shopView')?.classList.contains('active'))await renderShop();
     if(table==='announcements'&&$('#newsView')?.classList.contains('active'))await renderNews();
     if(table==='jobs'&&$('#recruitmentView')?.classList.contains('active'))await renderRecruitment();
@@ -2278,14 +2286,76 @@ window.activateRolePreview=async role=>{
 };
 window.exitRolePreview=()=>{previewRole=null;previewPermissions=new Set();updatePreviewBanner();nav('home');toast('Retour à votre vue réelle.');};
 
+async function syncBusinessStatus(){
+  if(!hasSupabase)return;
+  try{
+    const {data,error}=await sb.from('site_settings').select('*').eq('id','main').maybeSingle();
+    if(error)throw error;
+    if(!data)return;
+    const changed=Boolean(settings.business_open)!==Boolean(data.business_open);
+    settings={...defaults.settings,...settings,...data};
+    applySettingsToUI();
+    if(changed&&uiIsStaff())await renderStaffHome();
+  }catch(err){
+    console.warn('[LTD status sync]',err);
+  }
+}
+
+function applyRealtimeBusinessStatus(payload){
+  const row=payload?.new||null;
+  if(!row||String(row.id)!=='main')return;
+  const changed=Boolean(settings.business_open)!==Boolean(row.business_open);
+  settings={...defaults.settings,...settings,...row};
+  applySettingsToUI();
+  if(changed&&uiIsStaff())void renderStaffHome();
+}
+
+function initBusinessStatusRealtime(){
+  if(!hasSupabase)return;
+  if(businessStatusChannel){
+    try{sb.removeChannel(businessStatusChannel)}catch{}
+    businessStatusChannel=null;
+  }
+  businessStatusChannel=sb
+    .channel('ltd-business-status-live-v1')
+    .on('postgres_changes',{
+      event:'UPDATE',
+      schema:'public',
+      table:'site_settings',
+      filter:'id=eq.main'
+    },applyRealtimeBusinessStatus)
+    .subscribe(status=>{
+      if(status==='SUBSCRIBED')void syncBusinessStatus();
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        console.warn('[LTD status realtime]',status);
+        void syncBusinessStatus();
+      }
+    });
+
+  if(businessStatusPollTimer)clearInterval(businessStatusPollTimer);
+  businessStatusPollTimer=setInterval(()=>{void syncBusinessStatus()},8000);
+
+  if(!businessStatusSyncBound){
+    businessStatusSyncBound=true;
+    window.addEventListener('focus',()=>{void syncBusinessStatus()});
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible')void syncBusinessStatus();
+    });
+    window.addEventListener('online',()=>{void syncBusinessStatus()});
+  }
+}
+
 function initRealtime(){
   if(!hasSupabase)return;
   if(realtimeChannel){try{sb.removeChannel(realtimeChannel)}catch{}realtimeChannel=null}
-  let ch=sb.channel('ltd-sandy-live-v9');
-  ['orders','site_settings','products','announcements','contacts','jobs','profiles','promotions','partnership_requests','applications','delivery_reviews','product_favorites'].forEach(table=>{
+  let ch=sb.channel('ltd-sandy-live-v10');
+  ['orders','products','announcements','contacts','jobs','profiles','promotions','partnership_requests'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},()=>scheduleRealtimeRefresh(table));
   });
-  realtimeChannel=ch.subscribe();
+  realtimeChannel=ch.subscribe(status=>{
+    if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('[LTD realtime]',status);
+  });
+  initBusinessStatusRealtime();
 }
 
 async function initAuth(){
