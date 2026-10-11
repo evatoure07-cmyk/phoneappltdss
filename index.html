@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css?v=9.1.0" />
+  <link rel="stylesheet" href="styles.css?v=9.2.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -322,10 +322,7 @@
               <div class="form-group"><label>Petite présentation</label><textarea id="profileBio" maxlength="160" placeholder="Ex : Responsable des ventes, livraisons et relation client"></textarea></div>
               <label class="profile-switch-row"><input type="checkbox" id="profileShowPhone"><span><strong>Afficher mon numéro</strong><small>Visible dans l’espace contacts du LTD.</small></span></label>
             </div>
-            <div class="profile-save-row">
-              <button class="btn ghost" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i> Changer mon mot de passe</button>
-              <button class="btn primary" id="profileSaveButton"><i data-lucide="save"></i> Enregistrer les modifications</button>
-            </div>
+
           </section>
 
           <aside class="profile-side">
@@ -335,10 +332,16 @@
             </section>
             <section class="profile-panel profile-image-help" id="profilePasteZone" tabindex="0">
               <div class="profile-panel-title"><div><span class="eyebrow">PHOTO</span><h3>Ajouter une photo</h3></div><i data-lucide="images"></i></div>
-              <p>Choisissez un fichier, utilisez le bouton <strong>Coller une image</strong>, ou copiez une image puis faites <strong>Ctrl+V / Cmd+V</strong> sur cette zone.</p>
+              <p>Choisissez une image, collez-la depuis votre presse-papiers ou glissez-déposez-la directement ici.</p>
+              <div class="profile-drop-hint"><i data-lucide="upload-cloud"></i><span>Déposer une image ici</span></div>
               <div id="profileImageStatus" class="profile-image-status">Aucune nouvelle image sélectionnée.</div>
             </section>
           </aside>
+        </div>
+
+        <div class="profile-page-actions">
+          <button class="profile-password-action" type="button" data-ltd-action="change-password"><i data-lucide="lock-keyhole"></i><span><strong>Changer mon mot de passe</strong><small>Sécurité du compte</small></span></button>
+          <button class="profile-main-save" id="profileSaveButton"><i data-lucide="save"></i><span><strong>Enregistrer les modifications</strong><small>Photo et informations du profil</small></span></button>
         </div>
       </section>
 
@@ -390,6 +393,6 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="config.js?v=8.3.0"></script>
-  <script src="app.js?v=9.1.0"></script>
+  <script src="app.js?v=9.2.0"></script>
 </body>
 </html>
