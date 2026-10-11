@@ -1377,7 +1377,7 @@ function showPasswordChange(required=false){
   openModal(`${required?'':`<button class="icon-btn close" onclick="closeModal()">×</button>`}<span class="eyebrow">SÉCURITÉ</span><h3>${title}</h3><p class="page-intro">${required?'Votre mot de passe actuel est temporaire. Choisissez-en un nouveau avant de continuer.':'Choisissez un nouveau mot de passe.'}</p><div class="form-group"><label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div><div class="form-group"><label>Confirmer</label><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe"></div><div class="modal-actions">${required?`<button class="btn ghost" onclick="logoutFromPasswordPrompt()">Se déconnecter</button>`:''}<button class="btn primary" onclick="saveMyNewPassword(${required?'true':'false'})">Enregistrer</button></div>`,required);
 }
 window.showPasswordChange=showPasswordChange;
-window.LTD_BUILD='9.1.0';
+window.LTD_BUILD='9.2.0';
 console.info('[LTD Sandy Shores] build',window.LTD_BUILD);
 window.saveMyNewPassword=async required=>{
   const a=$('#newPassword')?.value||'',b=$('#confirmPassword')?.value||'';
@@ -1585,6 +1585,19 @@ $('#profilePasteZone')?.addEventListener('paste',e=>{
   if(!item)return;
   const file=item.getAsFile();
   if(file){e.preventDefault();setProfileAvatarPreview(file);}
+});
+const profilePasteZone=$('#profilePasteZone');
+profilePasteZone?.addEventListener('dragover',e=>{
+  e.preventDefault();
+  profilePasteZone.classList.add('drag-active');
+});
+profilePasteZone?.addEventListener('dragleave',()=>profilePasteZone.classList.remove('drag-active'));
+profilePasteZone?.addEventListener('drop',e=>{
+  e.preventDefault();
+  profilePasteZone.classList.remove('drag-active');
+  const file=[...(e.dataTransfer?.files||[])].find(f=>String(f.type||'').startsWith('image/'));
+  if(file)setProfileAvatarPreview(file);
+  else toast('Déposez un fichier image.');
 });
 document.addEventListener('paste',e=>{
   if(!$('#profileView')?.classList.contains('active'))return;
